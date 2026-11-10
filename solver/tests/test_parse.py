@@ -61,6 +61,17 @@ def test_kinds(latex, kind):
     assert parse_problem(latex).kind == kind
 
 
+def test_pi_is_the_constant():
+    from sympy import Rational, pi
+    assert parse_problem(r"\sin\frac{\pi}{6}").expr == Rational(1, 2)
+    assert parse_problem(r"\int_{0}^{\pi}x\,dx").expr.limits[0][2] == pi
+    assert parse_problem(r"\int_{0}^{\pi}x\,dx").symbols == [Symbol("x")]
+
+
+def test_limit_direction_is_not_a_variable():
+    assert parse_problem(r"\lim_{x\to0^{+}}\frac{1}{x}").symbols == [Symbol("x")]
+
+
 def test_raw_keeps_expression_as_written():
     from sympy import fraction
     p = parse_problem(r"\frac{x^3y^2}{xy^4}")

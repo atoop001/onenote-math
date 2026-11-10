@@ -2,7 +2,7 @@
 import re
 import warnings
 
-from sympy import E, Derivative, Eq, I, Integral, Limit, Sum, Symbol, Tuple
+from sympy import E, Derivative, Eq, I, Integral, Limit, Sum, Symbol, Tuple, pi
 from sympy.core.function import AppliedUndef
 from sympy.core.relational import Relational
 
@@ -54,6 +54,8 @@ def _rebuild(e, sum_vars: set, evaluate: bool = True):
     if isinstance(e, Symbol):
         if e.name == "e":
             return E
+        if e.name == "pi":
+            return pi
         if e.name == "i" and "i" not in sum_vars:
             return I
         return e
@@ -86,6 +88,8 @@ def _clean(e, evaluate: bool = True):
 
 
 def _order(symbols) -> list:
+    symbols = [s for s in symbols if s.name.replace("'", "").isidentifier()]   # drops Limit's '+'/'-' dir
+
     def key(s):
         return (_PREFERRED.index(s.name), "") if s.name in _PREFERRED else (len(_PREFERRED), s.name)
     return sorted(symbols, key=key)
