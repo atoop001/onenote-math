@@ -12,7 +12,7 @@
       { "title": "Prompt pages in OneNote", "done": true },
       { "title": "User writes samples on Surface", "done": false },
       { "title": "Ink extraction and rendering", "done": false },
-      { "title": "Scoring harness", "done": false },
+      { "title": "Scoring harness", "done": true },
       { "title": "Baseline recognizers", "done": false },
       { "title": "Tuning experiment and gate report", "done": false }
     ]},
