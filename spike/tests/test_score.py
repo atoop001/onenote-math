@@ -35,6 +35,11 @@ def test_argument_braces_are_kept():
 
 def test_different_math_stays_different():
     assert normalize(r"\sin(x)+1") != normalize(r"\sin(x+1)")
+    assert normalize(r"\log(x)^2") != normalize(r"\log x^2")      # (log x)^2 vs log(x^2)
+    assert normalize(r"\ln(x)^{2}") != normalize(r"\ln x^2")
+    assert normalize(r"\sin(x)y") != normalize(r"\sin xy")
+    for deco in (r"\overline", r"\bar", r"\vec", r"\hat", r"\mathbf"):
+        assert normalize(deco + "{x+y}") != normalize(deco + "{x}+y"), deco
     assert normalize("s i n") == normalize(r"\sin")
     assert normalize(r"\sin(x+1)") != normalize(r"\sin x+1")
     assert normalize("x^{12}") != normalize("x^1 2")

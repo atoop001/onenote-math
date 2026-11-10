@@ -20,7 +20,13 @@ _FUNC_NAMES = ["arcsin", "arccos", "arctan", "sinh", "cosh", "tanh", "sin", "cos
                "sec", "csc", "cot", "log", "lim", "exp", "ln"]  # longest first
 _FUNCS = {"\\" + n for n in _FUNC_NAMES if n != "lim"}
 # A brace group right after one of these is an argument and must be kept.
-_ARG_TAKERS = {"^", "_", "}", "]", r"\frac", r"\sqrt", r"\binom", r"\text"}
+_ARG_TAKERS = {"^", "_", "}", "]", r"\frac", r"\sqrt", r"\binom", r"\text",
+               r"\overline", r"\underline", r"\bar", r"\vec", r"\hat", r"\tilde", r"\dot",
+               r"\ddot", r"\mathbf", r"\boldsymbol", r"\mathbb", r"\mathcal"}
+# Parens after a function can only be dropped if what follows can't attach to the argument:
+# \log(x)^2 is (log x)^2, not log(x^2); \sin(x)y is sin(x)*y, not sin(xy).
+_SAFE_AFTER_PAREN = {"+", "-", "=", "<", ">", ",", ")", "]", "}", "\\\\", r"\endrows", r"\cdot",
+                     r"\times", r"\leq", r"\geq", r"\neq", r"\to", r"\pm", r"\mp", "/"}
 # Every multi-row layout (a system written as two stacked lines) reads the same in the confirm box.
 _ENV_BEGIN = re.compile(r"\\begin\{(?:matrix|cases|array|aligned|gathered|split|align\*?)\}(?:\{[lcr|]*\})?")
 _ENV_END = re.compile(r"(?:\\\\\s*)?\\end\{(?:matrix|cases|array|aligned|gathered|split|align\*?)\}")
@@ -72,6 +78,16 @@ def _is_atom(content: list[str]) -> bool:
     return bool(content) and _operand_end(content, 0) == len(content)
 
 
+def _safe_after(tokens: list[str], k: int) -> bool:
+    if k >= len(tokens):
+        return True
+    nxt = tokens[k]
+    if nxt in _SAFE_AFTER_PAREN or nxt in _FUNCS:
+        return True
+    # a differential: \sin(x)dx, \cos(\theta)d\theta
+    return nxt == "d" and k + 1 < len(tokens) and (tokens[k + 1].isalpha() or tokens[k + 1].startswith("\\"))
+
+
 def _strip_groups(tokens: list[str]) -> tuple[list[str], bool]:
     """Drop braces that only group (not arguments) and parens around one atom after a function."""
     for i, t in enumerate(tokens):
@@ -82,7 +98,7 @@ def _strip_groups(tokens: list[str]) -> tuple[list[str], bool]:
                 return tokens[:i] + tokens[i + 1:j] + tokens[j + 1:], True
         if t == "(" and prev in _FUNCS:
             j = _match(tokens, i, "(", ")")
-            if j > 0 and _is_atom(tokens[i + 1:j]):
+            if j > 0 and _is_atom(tokens[i + 1:j]) and _safe_after(tokens, j + 1):
                 return tokens[:i] + tokens[i + 1:j] + tokens[j + 1:], True
     return tokens, False
 
@@ -110,9 +126,8 @@ def normalize(latex: str) -> list[str]:
     changed = True
     while changed:
         tokens, c1 = _strip_single(tokens, "{", "}")
-        tokens, c2 = _strip_single(tokens, "(", ")", only_after=_FUNCS)
-        tokens, c3 = _strip_groups(tokens)
-        changed = c1 or c2 or c3
+        tokens, c2 = _strip_groups(tokens)
+        changed = c1 or c2
     return tokens
 
 

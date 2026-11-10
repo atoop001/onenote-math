@@ -18,18 +18,20 @@
 
 TexTeller by area (zero fixes / ≤2 fixes): algebra 93% / 100%, precalc 90% / 90%, calc 1 87% / 100%, calc 2 100% / 100%.
 
-Error split for TexTeller: 4 problems need any fix, all **symbol** errors and none structural (e.g. `sec` read as `∫ e c`, `9` as `q`, `dx` as `dα`, one dropped pair of parentheses). The confirm panel's per-symbol tap-to-fix chips cover these, so no structural-fix priority is needed.
+Error split for TexTeller: 4 problems need any fix, all **symbol** errors and none structural (a misread letter or digit in a trig name, a constant, a differential, and one dropped pair of parentheses). The confirm panel's per-symbol tap-to-fix chips cover these, so no structural-fix priority is needed.
 
 The scorer first counted equivalent forms as errors (a two-line system written as `matrix` instead of `cases` = 10 fixes; `\rightarrow` vs `\to`; bare `lnx`). Before that fix, the scores were TexTeller 72% / 90% and Pix2Text 58% / 77%. All 18 TexTeller items that became zero-fix were checked by eye and are the same math.
 
 ## Tuning experiment: not run
 
-The baseline already passes, and personal tuning is a later feature in the spec (learning from corrections). Fine-tuning on 60 samples risks overfitting for a small expected gain, and the tune set is incomplete on the dev machine (20/60: pages Tune 2–5 have no ink here). `finetune.py` was not written.
+The plan asked for the gate to be measured after tuning. The untuned baseline already passes, so skipping tuning only makes the result more conservative. The tune set is also incomplete on the dev machine (20/60: pages Tune 2–5 have no ink here). `finetune.py` was not written.
+
+**Open risk:** spec §6.3 makes a one-time **personal tuning session required**. This spike did not prove that TexTeller can be fine-tuned on a few dozen samples and still run on CPU. That must be shown in the milestone that builds the tuning session, before it is built around TexTeller.
 
 ## Caveats and what M4 must carry forward
 
 1. **Latency is the tight spot.** About 2.1 s estimated on the Surface for recognition alone, against the spec's <3 s to the confirm box. The model must stay loaded (a resident service; cold load is ~36 s), and M4 should measure on the Surface itself early.
-2. **Canonicalize reader output before SymPy.** Bare `lnx`/`log1000` → `\ln x`/`\log 1000`, `\rightarrow` → `\to`, `f^{'}` → `f'`, and matrix/array systems treated as a system. This is the same mapping as `normalize`.
+2. **Canonicalize reader output before SymPy, using a vetted subset only.** Bare `lnx`/`log1000` → `\ln x`/`\log 1000`, `\rightarrow` → `\to`, `f^{'}` → `f'`, and matrix/array systems treated as a system. Do **not** reuse `normalize()` as-is: it is a scoring tool, and dropping parentheses or braces must never change meaning before solving (e.g. `\ln(x)^2` is (ln x)², not ln(x²)). Every rewrite M4 uses needs its own does-not-change-meaning test.
 3. **Import order.** In one process, PyTorch must be imported before the WinRT ink APIs (WinError 1114 otherwise), or the two must run in separate processes.
 4. **One sitting, careful writing.** All 60 samples were written in one session. Rushed live-tutoring handwriting may score lower. Collect real corrections from M5 on, to feed the personal tuning planned in the spec.
 5. Pix2Text is 4× faster but fails the gate. Keep it only as a candidate for a fast first guess, if latency on the Surface proves too slow.
