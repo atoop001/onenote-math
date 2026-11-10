@@ -77,11 +77,11 @@ def _verify_relation_set(p: Problem, value: Set, var) -> bool:
     return checked >= 20
 
 
-def _no_real_root(f, var) -> bool:
+def _no_real_root(f, var, p=None) -> bool:
     prev = None
     for i in range(-400, 401):
         v = _num(f, {var: i / 8})
-        if v is None or abs(v.imag) > TOL:
+        if v is None or abs(v.imag) > TOL or (p is not None and not _sides_real(p, {var: i / 8})):
             prev = None
             continue
         if abs(v.real) < 1e-6:
@@ -90,6 +90,51 @@ def _no_real_root(f, var) -> bool:
             return False
         prev = v.real
     return True
+
+
+def _real(v) -> bool:
+    return v is not None and abs(v.imag) <= 1e-12 * max(1.0, abs(v))
+
+
+def _sides_real(p: Problem, subs) -> bool:
+    """Both sides defined and real here (an 'answer' where ln of a negative appears is no answer)."""
+    e = p.expr
+    return _real(_num(e.lhs, subs)) and _real(_num(e.rhs, subs))
+
+
+def _real_roots_of(f, var, lo=-50.0, hi=50.0, step=1 / 16):
+    """Roots of a real residual found by sign changes on a grid, refined by bisection; poles are dropped."""
+    fl = lambdify(var, f, "mpmath")
+
+    def val(t):
+        try:
+            c = complex(fl(mpmath.mpf(t)))
+        except (ZeroDivisionError, ValueError, TypeError, OverflowError):
+            return None
+        return c.real if abs(c.imag) <= 1e-12 * max(1.0, abs(c)) and c == c else None
+
+    roots, t, prev = [], lo, None
+    while t <= hi:
+        cur = val(t)
+        if cur is not None and prev is not None and prev[1] != 0 and (prev[1] > 0) != (cur > 0):
+            a, b, fa = prev[0], t, prev[1]
+            for _ in range(60):
+                m = (a + b) / 2
+                fm = val(m)
+                if fm is None:
+                    break
+                if (fm > 0) == (fa > 0):
+                    a, fa = m, fm
+                else:
+                    b = m
+            fm = val((a + b) / 2)
+            if fm is not None and abs(fm) < 1e-6:
+                roots.append((a + b) / 2)
+        elif cur is not None and cur == 0:
+            roots.append(t)
+        prev = (t, cur) if cur is not None else None
+        t += step
+    return roots
 
 
 def verify_solve(p, r, var):
@@ -101,11 +146,32 @@ def verify_solve(p, r, var):
         return False
     pts = _members(v, var)
     if not pts:
-        return not p.has_complex and _no_real_root(f, var)
+        return not p.has_complex and _no_real_root(f, var, p)
     for s in pts:
         if not _close(_num(f, {var: s}), 0):
             return False
+        if not p.has_complex and not getattr(s, "free_symbols", None) and \
+                not (_real(_num(s)) and _sides_real(p, {var: s})):
+            return False
+    if p.has_complex or any(getattr(s, "free_symbols", None) for s in pts) or f.free_symbols - {var}:
+        return True
+    # completeness: every real root the residual has must be among the answers
+    listed = [complex(_num(s)).real for s in (_wide_members(v, var) if not isinstance(v, list) else pts)]
+    for root in _real_roots_of(f, var):
+        if not any(abs(root - s) < 1e-5 * max(1.0, abs(s)) for s in listed):
+            return False
     return True
+
+
+def _wide_members(s, var):
+    if isinstance(s, ImageSet):
+        return [s.lamda(kv) for kv in range(-20, 21)]
+    if isinstance(s, Union):
+        out = []
+        for a in s.args:
+            out += _wide_members(a, var)
+        return out
+    return list(s)
 
 
 def verify_solve_system(p, r, var):
@@ -113,6 +179,8 @@ def verify_solve_system(p, r, var):
     if not sols:
         return False
     for sol in sols:
+        if not p.has_complex and not all(_real(_num(val)) for val in sol.values()):
+            return False
         for eq in p.equations:
             if not _close(_num(eq.lhs - eq.rhs, sol), 0):
                 return False
@@ -131,8 +199,11 @@ def _integral_parts(p: Problem, var):
     return f, x, (lim[1], lim[2]) if len(lim) == 3 else None
 
 
-def _truncated(fl, a, b, a_cut, b_cut):
-    return mpmath.quad(fl, [a_cut, b_cut])
+def _quad(fl, lo, hi):
+    """Quadrature split at 0 and at ±10^k, so wide or infinite ranges stay accurate."""
+    cuts = [mpmath.mpf(0)] + [s * mpmath.mpf(10) ** k for k in range(0, 7) for s in (1, -1)]
+    pts = [lo] + sorted(c for c in cuts if lo < c < hi) + [hi]
+    return mpmath.quad(fl, pts)
 
 
 def _diverges(f, x, a, b) -> bool:
@@ -147,7 +218,7 @@ def _diverges(f, x, a, b) -> bool:
         eps, big = mpmath.mpf(10) ** -kexp, mpmath.mpf(10) ** kexp
         lo = (-big if a.is_infinite else mpmath.mpf(N(a, 30)) + (eps if a_sing else 0))
         hi = (big if b.is_infinite else mpmath.mpf(N(b, 30)) - (eps if b_sing else 0))
-        vals.append(abs(complex(mpmath.quad(fl, [lo, hi]))))
+        vals.append(abs(complex(_quad(fl, lo, hi))))
     steps = [vals[i + 1] - vals[i] for i in range(len(vals) - 1)]
     return steps[-1] > 0.3 * abs(steps[0]) and vals[-1] > 2
 
@@ -156,14 +227,17 @@ def verify_integrate(p, r, var):
     f, x, bounds = _integral_parts(p, var)
     v = r.value
     if bounds is None:
-        for t in _rand_points(5):
-            d = _num(Derivative(v, x).doit(), {x: t})
-            g = _num(f, {x: t})
-            if g is None:
+        xr = Symbol(x.name, real=True)
+        dv, fr = Derivative(v.subs(x, xr), xr).doit(), f.subs(x, xr)
+        checked = 0
+        for t in _rand_points(10, 0.05, 2.8) + _rand_points(8, -2.8, -0.05, seed=4):
+            g = _num(fr, {xr: t})
+            if not _real(g):
                 continue
-            if not _close(d, g, 1e-8):
+            if not _close(_num(dv, {xr: t}), g, 1e-8):
                 return False
-        return True
+            checked += 1
+        return checked >= 3
     a, b = bounds
     if v in (oo, -oo):
         return _diverges(f, x, a, b)
@@ -172,7 +246,7 @@ def verify_integrate(p, r, var):
     fl = lambdify(x, f, "mpmath")
     lo = -mpmath.inf if a == -oo else (mpmath.inf if a == oo else mpmath.mpf(N(a, 30)))
     hi = mpmath.inf if b == oo else (-mpmath.inf if b == -oo else mpmath.mpf(N(b, 30)))
-    q = complex(mpmath.quad(fl, [lo, hi]))
+    q = complex(_quad(fl, lo, hi))
     return _close(q, _num(v), 1e-8)
 
 
@@ -291,6 +365,10 @@ def _same_function(a, b, symbols) -> bool:
 
 
 def verify_same(p, r, var):
+    if not p.has_complex and not _original(p).free_symbols:
+        v = _num(r.value)
+        if v is not None and not _real(v):
+            return False                     # spec §7: real answers only
     return _same_function(_original(p), r.value, sorted(_original(p).free_symbols, key=str))
 
 
@@ -329,12 +407,40 @@ def verify_series(p, r, var):
         return False
     if bool(truth) is not bool(conv):
         return False
+    if _numeric_contradicts(s, bool(conv)):     # an independent second look at the same claim
+        return False
     if total is None:
         return True
     n, a, b = s.limits[0]
     fl = lambdify(n, s.function, "mpmath")
     approx = complex(mpmath.nsum(fl, [int(a), mpmath.inf if b == oo else int(b)]))
     return _close(approx, _num(total), 1e-8)
+
+
+def _numeric_contradicts(s, conv: bool) -> bool:
+    """Partial sums S(10^2), S(10^3), S(10^4): a convergent series' increments shrink; a divergent one's don't."""
+    n, a, _ = s.limits[0]
+    fl = lambdify(n, s.function, "mpmath")
+    old = mpmath.mp.dps
+    mpmath.mp.dps = 15
+    try:
+        total, sums, k = mpmath.mpf(0), {}, int(a)
+        for stop in (10**2, 10**3, 10**4):
+            while k <= stop:
+                total += fl(k)
+                k += 1
+            sums[stop] = complex(total)
+        tail = abs(complex(fl(10**4)))
+    except (OverflowError, ValueError, ZeroDivisionError, TypeError):
+        return False                         # can't sample: no contradiction found
+    finally:
+        mpmath.mp.dps = old
+    if not all(abs(v) < float("inf") and v == v for v in sums.values()):
+        return conv
+    d1, d2 = abs(sums[10**3] - sums[10**2]), abs(sums[10**4] - sums[10**3])
+    if conv:
+        return tail > 1e-2 or (d1 > 1e-9 and d2 >= 0.95 * d1)
+    return tail < 1e-12 and d2 < 0.5 * d1 and d2 < 1e-3
 
 
 def verify_ode(p, r, var):

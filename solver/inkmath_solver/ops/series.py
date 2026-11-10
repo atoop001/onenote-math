@@ -44,6 +44,11 @@ def classify(term, n, start=1) -> tuple[str, bool] | None:
     if L is not None and L != 0:
         shown = "does not exist" if isinstance(L, AccumBounds) else t(L)
         return f"Divergence test: lim aₙ = {shown} ≠ 0", False
+    if L is None:          # e.g. (−1)ⁿ·n/(n + 1): no limit, but |aₙ| → 1, so the terms don't approach 0
+        k = Symbol("k", integer=True, positive=True)
+        La = _lim(simplify(Abs(term.subs(n, k))).subs(k, n), n)
+        if La is not None and La.is_number and La != 0:
+            return f"Divergence test: |aₙ| → {t(La)}, so aₙ does not approach 0", False
 
     r = simplify(term.subs(n, n + 1) / term)
     if not r.has(n) and r.is_number:
@@ -51,7 +56,7 @@ def classify(term, n, start=1) -> tuple[str, bool] | None:
         return f"Geometric series: r = {t(r)}, |r| {'<' if conv else '≥'} 1", conv
 
     c, e = term.as_coeff_exponent(n)
-    if e != 0 and not c.has(n) and simplify(term - c * n**e) == 0:
+    if e != 0 and e.is_number and not c.has(n) and simplify(term - c * n**e) == 0:
         p = -e
         conv = bool(p > 1)
         return f"p-series: p = {t(p)} {'>' if conv else '≤'} 1", conv

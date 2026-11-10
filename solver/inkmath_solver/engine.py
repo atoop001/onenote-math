@@ -23,6 +23,9 @@ RUNNERS = {
     "limit": run_limit, "series": run_series, "identity": run_identity, "ode": run_ode,
 }
 ERROR_MESSAGE = "Something went wrong solving this"
+# SymPy internals that must never be written onto the tutor's page
+RAW_FORMS = ("re(", "im(", "Piecewise", "AccumBounds", "Derivative(", "Integral(", "zoo", "nan", "ConditionSet",
+             "RootOf", "Subs(", "Limit(", "Sum(")
 
 
 def _pick_variable(p, name):
@@ -60,6 +63,11 @@ def _handle(req: Request, t0: float) -> Response:
     except CannotSolve as e:
         return Response(id=req.id, status="cannot_solve", operation=op, variable=var and var.name,
                         message=e.message)
+    shown = " ".join([result.answer.text, *result.steps, *result.notes])
+    if any(tok in shown for tok in RAW_FORMS):
+        log.warning("raw SymPy form in answer for %r: %s", req.latex, shown)
+        return Response(id=req.id, status="cannot_solve", operation=op, variable=var and var.name,
+                        message="Couldn't put this answer in a clean form")
     verified = result.checkable and verify(op, p, result, var)
     return Response(
         id=req.id, status="ok", operation=op, variable=var.name if var is not None else None,

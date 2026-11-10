@@ -1,5 +1,5 @@
 """Algebra and precalc: solve, systems, simplify/factor/expand, evaluate, identities. Key steps per spec §6.4."""
-from sympy import (Abs, Add, ConditionSet, Dummy, EmptySet, Eq, FiniteSet, ImageSet, Interval, Mul, N, Poly, Pow,
+from sympy import (Abs, Add, ConditionSet, Dummy, EmptySet, Eq, FiniteSet, Float, I, re, ImageSet, Interval, Mul, N, Poly, Pow,
                    Rational, S, Symbol, Union, cancel, sqrt, expand, factor, factor_list, floor, fraction, latex, log, nsimplify,
                    pi, simplify, solve, solveset, together, trigsimp, expand_trig)
 from sympy.core.relational import Relational
@@ -81,8 +81,10 @@ def _sorted(sols):
 def _solutions_answer(var, sols) -> Answer:
     if not sols:
         return Answer(r"\text{No real solutions}", "No real solutions", None)
-    text = ", ".join(f"{t(var)} = {t(s)}" for s in sols)
-    tex = ", ".join(f"{latex(var)} = {latex(s)}" for s in sols)
+    text = ", ".join(f"{t(var)} ≈ {decimal_of(s)}" if isinstance(s, Float) else f"{t(var)} = {t(s)}"
+                     for s in sols)
+    tex = ", ".join(f"{latex(var)} \\approx {decimal_of(s)}" if isinstance(s, Float) else
+                    f"{latex(var)} = {latex(s)}" for s in sols)
     decs = [decimal_of(s) for s in sols]
     dec = ", ".join(d or t(s) for d, s in zip(decs, sols)) if any(decs) else None
     return Answer(tex, text, dec)
@@ -316,16 +318,46 @@ def run_solve(p: Problem, var, point=None) -> OpResult:
         if not pool:
             raise CannotSolve("Couldn't solve this exactly")
         sols = [c for c in pool if _satisfies(f, var, c, p.has_complex)]
+    sols = list(sols)
+    if not p.has_complex:
+        rejected = [s for s in sols if not s.free_symbols and not _real_on_both_sides(eq, var, s)]
+        for s in rejected:      # e.g. ln(x − 1) = ln(2x) at x = −1: both sides are logs of negatives
+            if _num(s) is not None and abs(_num(s).imag) < 1e-12:
+                cands.append(s)
+        sols = [_real_form(s) for s in sols if s not in rejected]
     sols = _sorted(sols)
     for c in cands:
         if c.is_real and c not in sols:
-            notes.append(f"{t(var)} = {t(c)} rejected (doesn't check)")
+            note = f"{t(var)} = {t(c)} rejected (doesn't check)"
+            if note not in notes:
+                notes.append(note)
+    if any(isinstance(s, Float) for s in sols):
+        notes.append("The exact form needs complex numbers, so decimals are shown")
     return OpResult(sols, _solutions_answer(var, sols), steps[:4], notes)
+
+
+def _real_on_both_sides(eq, var, s) -> bool:
+    for side in (eq.lhs, eq.rhs):
+        v = _num(side.subs(var, s))
+        if v is None or abs(v.imag) > 1e-12 * max(1.0, abs(v)):
+            return False
+    return True
+
+
+def _real_form(s):
+    """A real root SymPy wrote with i (casus irreducibilis of a cubic) → a 30-digit decimal."""
+    if s.has(I):
+        v = _num(s)
+        if v is not None and abs(v.imag) < 1e-20 * max(1.0, abs(v)):
+            return Float(N(re(s), 30), 30)
+    return s
 
 
 def run_solve_system(p: Problem, var=None, point=None) -> OpResult:
     syms = p.symbols
     sols = solve(p.equations, syms, dict=True)
+    if any(v.free_symbols for s in sols for v in s.values()) or any(len(s) < len(syms) for s in sols):
+        raise CannotSolve("This system has infinitely many solutions")
     if not p.has_complex:
         sols = [s for s in sols if all(v.is_real is not False for v in s.values())]
     sols = sorted(sols, key=lambda d: [float(N(d.get(s, 0)).as_real_imag()[0]) for s in syms])
@@ -407,6 +439,10 @@ def run_expand(p: Problem, var=None, point=None) -> OpResult:
 def run_evaluate(p: Problem, var=None, point=None) -> OpResult:
     orig = _original(p)
     v = simplify(p.expr)
+    vn = None if _undefined(v) else _num(v)
+    if not p.has_complex and vn is not None and abs(vn.imag) > 1e-12 * max(1.0, abs(vn)):
+        return OpResult(v, Answer(r"\text{Not a real number}", "Not a real number", None),
+                        ["The value is not a real number"], [], checkable=False)
     if _undefined(v):
         return OpResult(S.ComplexInfinity, Answer(r"\text{Undefined}", "Undefined", None),
                         ["Division by zero or a value outside the domain"], [])

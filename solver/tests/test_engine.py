@@ -73,3 +73,13 @@ def test_corpus_all_120():
         if r.status == "cannot_solve":
             assert p["latex"].startswith(r"\sum"), (p["id"], r.message)
     assert bad == []
+
+
+def test_raw_sympy_never_reaches_the_page(monkeypatch):
+    import inkmath_solver.engine as eng
+    from inkmath_solver.ops.base import OpResult
+    from inkmath_solver.schema import Answer
+    bad = OpResult(value=1, answer=Answer("", "Piecewise((0, Eq(x, 0)), (1/x, True))", None), steps=[], notes=[])
+    monkeypatch.setitem(eng.RUNNERS, "solve", lambda *a: bad)
+    r = h("3x-7=11")
+    assert r.status == "cannot_solve" and r.answer is None

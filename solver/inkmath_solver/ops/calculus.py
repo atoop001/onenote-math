@@ -1,5 +1,5 @@
 """Derivatives, implicit derivatives, limits, integrals, ODEs — each names its method (spec §6.4)."""
-from sympy import (AccumBounds, Add, Derivative, Eq, Function, Integral, Limit, Mul, Pow, S, Symbol, apart,
+from sympy import (Abs, AccumBounds, Add, Piecewise, log, sign, Derivative, Eq, Function, Integral, Limit, Mul, Pow, S, Symbol, apart,
                    cancel, classify_ode, diff, dsolve, factor_list, fraction, idiff, integrate, latex, limit,
                    expand, factor_terms, oo, pi, simplify, sin, sqrt, together)
 from sympy.functions.elementary.trigonometric import TrigonometricFunction
@@ -57,13 +57,20 @@ def _rule_step(f, x) -> str:
     return "Basic derivative rules"
 
 
+def _real(x):
+    """The same letter, but real: d/dx|x| and ln|x| then come out as sign(x) and 1/x, not re/im pieces."""
+    return Symbol(x.name, real=True)
+
+
 def run_derivative(p: Problem, var, point=None) -> OpResult:
     if isinstance(p.expr, Derivative):
         f, x = p.expr.expr, p.expr.variables[0]
     else:
         f, x = p.expr, var
-    raw = diff(f, x)
-    d = _nicest(simplify(raw), factor_terms(expand(raw)), raw)
+    xr = _real(x)
+    raw = diff(f.subs(x, xr), xr)
+    alt = raw.replace(sign, lambda a: a / Abs(a))          # sign(x)/|x| → x/x² → 1/x
+    d = _nicest(simplify(raw), factor_terms(expand(raw)), raw, simplify(alt), alt).subs(xr, x)
     steps = [_rule_step(f, x), "Simplify"]
     if p.kind == "function_def":
         text = f"{_prime_name(p.func_name)}({t(x)}) = {t(d)}"
@@ -124,6 +131,8 @@ def run_limit(p: Problem, var, point=None) -> OpResult:
     if not isinstance(L, Limit):
         raise CannotSolve("There's no limit here")
     f, z, z0 = L.args[0], L.args[1], L.args[2]
+    zr = _real(z)
+    f, z = f.subs(z, zr), zr
     d = str(L.args[3])
     sides = None
     if d == "+-" and not z0.is_infinite:
@@ -136,7 +145,7 @@ def run_limit(p: Problem, var, point=None) -> OpResult:
         v = limit(f, z, z0, d if not z0.is_infinite else ("-" if z0 == oo else "+"))
     if isinstance(v, AccumBounds) or v.has(Limit):
         v = S.NaN
-    steps = _limit_steps(f, z, z0, v, sides)
+    steps = [s.replace("sign(", "sgn(") for s in _limit_steps(f, z, z0, v, sides)]
     tex = r"\text{Does not exist}" if v is S.NaN else latex(v)
     return OpResult(v, Answer(tex, _limit_text(v), decimal_of(v) if v is not S.NaN else None), steps[:4], [])
 
@@ -181,7 +190,7 @@ def _nicest(*candidates):
     """Shortest form, but never the phase-shift form √2·sin(x + π/4) a student wouldn't recognise."""
     def phase(e):
         return any(a.has(pi) and a.has(*e.free_symbols) for f in e.atoms(TrigonometricFunction) for a in f.args)
-    ok = [c for c in candidates if c is not None and not phase(c)] or [c for c in candidates if c is not None]
+    ok = [c for c in candidates if c is not None and not phase(c) and not c.has(Piecewise)] or         [c for c in candidates if c is not None]
     return min(ok, key=lambda c: (c.count_ops(), len(str(c))))
 
 
@@ -234,6 +243,19 @@ def _technique(f, x) -> tuple[str, bool]:
     return "Standard antiderivative", usable
 
 
+def _abs_logs(F, f, x):
+    """Textbook ln|u|: wrap a log's argument in |…| unless it is always positive or the integrand
+    itself needs it positive (∫x²ln x keeps ln x)."""
+    needed = {a.args[0] for a in f.atoms(log)}
+
+    def wrap(e):
+        if not isinstance(e, log):
+            return False
+        u = e.args[0]
+        return u.has(x) and u not in needed and u.is_positive is not True and not isinstance(u, Abs)
+    return F.replace(wrap, lambda e: log(Abs(e.args[0])))
+
+
 def _antiderivative(f, x):
     step, usable = _technique(f, x)
     if step.startswith("Partial fractions"):
@@ -263,8 +285,11 @@ def run_integrate(p: Problem, var, point=None) -> OpResult:
         f, lim = I.function, I.limits[0]
         x = lim[0]
         bounds = (lim[1], lim[2]) if len(lim) == 3 else None
+    xr = _real(x)
+    f, x = f.subs(x, xr), xr
     F, step = _antiderivative(f, x)
     if bounds is None:
+        F = _abs_logs(F, f, x)
         if p.kind == "function_def":
             name = p.func_name[:-1].replace("'", PRIME)
             text = f"{name}({t(x)}) = {t(F)} + C"
@@ -273,6 +298,9 @@ def run_integrate(p: Problem, var, point=None) -> OpResult:
         return OpResult(F, Answer(latex(F) + " + C", text, None), [step], [])
     a, b = bounds
     v = integrate(f, (x, a, b))
+    if isinstance(v, AccumBounds) or v.has(AccumBounds):    # ∫₀^∞ sin x: oscillates, no limit
+        steps = [step, f"Antiderivative: {t(F)}", "The value keeps oscillating → diverges"]
+        return OpResult(S.NaN, Answer(r"	ext{Diverges}", "Diverges", None), steps, [], checkable=False)
     if v.has(Integral) or v is S.NaN:
         raise CannotSolve("Couldn't evaluate this integral exactly")
     steps = [step, f"Antiderivative: {t(F)}"]

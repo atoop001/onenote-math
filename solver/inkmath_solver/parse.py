@@ -15,6 +15,7 @@ _REWRITES = [
     (re.compile(r"\\mathrm\{\s*d\s*\}"), "d"),
     (re.compile(r"\\operatorname\{\s*(" + _FUNCS + r")\s*\}"), r"\\\1"),
     (re.compile(r"\\rightarrow(?![a-zA-Z])"), r"\\to"),
+    (re.compile(r"\\(?:left|right|big|Big)\s*(?:\||\\vert(?![a-zA-Z]))"), "|"),
     (re.compile(r"\\le(?![a-zA-Z])"), r"\\leq"),
     (re.compile(r"\\ge(?![a-zA-Z])"), r"\\geq"),
     (re.compile(r"\^\s*\{\s*((?:\\prime\s*|'\s*)+)\}|\^\s*\\prime(?![a-zA-Z])"),
@@ -25,6 +26,7 @@ _ENV = re.compile(r"^\s*\\begin\{(cases|matrix|pmatrix|bmatrix|array|aligned|gat
                   r"(?:\{[lcr|]*\})?(.*?)\\end\{\1\}\s*$", re.S)
 _PREFERRED = ["x", "y", "t", "theta", "n"]
 _FUNC_DEF = re.compile(r"^[fgh]'*$")
+_PRIMED = re.compile(r"([A-Za-z])('+)")
 
 
 class ParseError(Exception):
@@ -56,6 +58,9 @@ def _rebuild(e, sum_vars: set, evaluate: bool = True):
             return E
         if e.name == "pi":
             return pi
+        m = _PRIMED.fullmatch(e.name)
+        if m:                                       # y' = y  ->  dy/dx = y
+            return Derivative(Symbol(m.group(1)), Symbol("x"), len(m.group(2)))
         if e.name == "i" and "i" not in sum_vars:
             return I
         return e
@@ -125,11 +130,11 @@ def parse_problem(latex: str) -> Problem:
             raise ParseError()
         if len(eqs) == 1:
             e = eqs[0]
+            raw = _clean(_parse_one(next(r for r in rows if r)), evaluate=False)
         else:
             expr = Tuple(*eqs)
             syms = set().union(*(q.atoms(Symbol) for q in eqs))
             return Problem(latex, "system", expr, eqs, _order(syms), None, expr.has(I))
-            raw = _clean(_parse_one(rows[0]), evaluate=False)
     else:
         parsed = _parse_one(s)
         e, raw = _clean(parsed), _clean(parsed, evaluate=False)
@@ -142,4 +147,5 @@ def parse_problem(latex: str) -> Problem:
                        raw.rhs if isinstance(raw, Eq) else e.rhs)
 
     syms = e.atoms(Symbol) if hasattr(e, "atoms") else set()
-    return Problem(latex, _kind(e), e, [], _order(syms), None, e.has(I), raw)
+    written = raw if raw is not None else e          # sqrt(-4) evaluates to 2i; the ink had no i
+    return Problem(latex, _kind(e), e, [], _order(syms), None, written.has(I), raw)

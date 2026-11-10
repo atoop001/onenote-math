@@ -138,7 +138,7 @@ class Server:
         rid = d.get("id", "") if isinstance(d, dict) else ""
         if isinstance(d, dict) and "control" in d:
             if d["control"] in CONTROLS:
-                return "control", d
+                return "control", {**d, "id": d.get("id")}      # no id: matches nothing, so it's ignored
             return "error", Response(id=str(rid), status="error", message="Unknown control")
         try:
             return "request", request_from_dict(d)

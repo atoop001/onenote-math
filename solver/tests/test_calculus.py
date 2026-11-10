@@ -97,4 +97,4 @@ def test_no_phase_shift_forms():
 
 
 def test_partial_fractions_answer_is_clean():
-    assert run(r"\int\frac{x+7}{x^2-x-6}dx", run_integrate).answer.text == "2ln(x − 3) − ln(x + 2) + C"
+    assert run(r"\int\frac{x+7}{x^2-x-6}dx", run_integrate).answer.text == "2ln|x − 3| − ln|x + 2| + C"

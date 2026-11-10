@@ -58,7 +58,11 @@ class _TextPrinter(StrPrinter):
         return "i"
 
     def _print_log(self, expr):
-        return "ln(%s)" % self._print(expr.args[0])
+        a = expr.args[0]
+        return "ln" + self._print(a) if a.func.__name__ == "Abs" else "ln(%s)" % self._print(a)
+
+    def _print_sign(self, expr):
+        return "sgn(%s)" % self._print(expr.args[0])
 
     def _print_exp(self, expr):
         return "e" + self._sup(expr.args[0])

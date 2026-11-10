@@ -127,3 +127,9 @@ def test_worker_crash_recovers():
     kill_worker_child(p)
     assert ask(p, {"id": "d", "latex": "x+1=2"})["status"] in ("ok", "error")
     assert ask(p, {"id": "e", "latex": "x+1=2"})["status"] == "ok"
+
+
+def test_control_without_id_keeps_serving():
+    p = start()
+    send(p, {"control": "stop"})
+    assert ask(p, {"id": "g", "latex": "x+1=2"})["id"] == "g"
