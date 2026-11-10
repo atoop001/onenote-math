@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "project": "OneNote Ink Math",
+  "updated": "2026-11-09",
+  "milestones": [
+    { "id": "M0", "title": "Design and plan", "steps": [
+      { "title": "Design spec approved", "done": true },
+      { "title": "Roadmap and M1 plan approved", "done": false }
+    ]},
+    { "id": "M1", "title": "Handwriting accuracy spike + gate", "steps": [
+      { "title": "Scaffold and prompt sets", "done": false },
+      { "title": "Prompt pages in OneNote", "done": false },
+      { "title": "User writes samples on Surface", "done": false },
+      { "title": "Ink extraction and rendering", "done": false },
+      { "title": "Scoring harness", "done": false },
+      { "title": "Baseline recognizers", "done": false },
+      { "title": "Tuning experiment and gate report", "done": false }
+    ]},
+    { "id": "M2", "title": "Solver engine", "steps": [ { "title": "Solver engine", "done": false } ] },
+    { "id": "M3", "title": "OneNote bridge (COM add-in)", "steps": [ { "title": "OneNote bridge (COM add-in)", "done": false } ] },
+    { "id": "M4", "title": "Recognizer service", "steps": [ { "title": "Recognizer service", "done": false } ] },
+    { "id": "M5", "title": "Confirm panel", "steps": [ { "title": "Confirm panel", "done": false } ] },
+    { "id": "M6", "title": "Integration and Surface install", "steps": [ { "title": "Integration and Surface install", "done": false } ] },
+    { "id": "M7", "title": "Online reader (conditional)", "steps": [ { "title": "Online reader (conditional)", "done": false } ] }
+  ]
+}
