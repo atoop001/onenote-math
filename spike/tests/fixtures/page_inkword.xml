@@ -1,0 +1,5 @@
+<?xml version="1.0"?>
+<!-- Synthetic (generated with encode_isf). InkWord inside an Outline, without its own Position. -->
+<one:Page xmlns:one="http://schemas.microsoft.com/office/onenote/2013/onenote" ID="{P}" name="fixture"><one:Title><one:OE><one:T>fixture</one:T></one:OE></one:Title>
+<one:Outline><one:Position x="40" y="230" z="1"/><one:Size width="100" height="30"/><one:OEChildren><one:OE><one:InkParagraph><one:InkWord recognizedText="x"><one:Data>R0lGODlhDAAMAHAAACH5BAEAAAEALAAAAAAMAAwAgQAAAAAAAAAAAAAAAAIaBIKJZqp93FrxxeZw0Lt2CybcR4YjdYpeUAAAIf69ALoBHQIYHgFQQfPzAPZer0mZuasWPfGj+ms7MLQWUhJOi8TauCd+lw6LnEDE4HKYRKhuwT5FR1upvJNbPS4WVkmfuV6XHyp+zsX1TvhxaJ9JmShR2kBhapwDJ0gRZAYABACrqtNBZQISiABmAhKIAkU0ZwIymABoBj4AT6mAAABGNAUBOBkcMgkA/v8HAQDAHkUzCQD+/wcBAMAeRTgEAP7/AQoYA4L+OIP40dCH8E9Xgbf5JcCC/vuL++4wADs=</one:Data></one:InkWord></one:InkParagraph></one:OE></one:OEChildren></one:Outline>
+</one:Page>
