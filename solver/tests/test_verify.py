@@ -111,6 +111,14 @@ def test_ode():
     ok("ode", r"\frac{dy}{dx}=3y", Eq(Y(x), C1*exp(3*x)), Eq(Y(x), C1*exp(2*x)))
 
 
+def test_ode_with_two_branches():
+    Y = Function("y")
+    C1 = Symbol("C1")
+    right = [Eq(Y(x), -sqrt(C1 + x**2)), Eq(Y(x), sqrt(C1 + x**2))]
+    wrong = [Eq(Y(x), -sqrt(C1 + 2*x**2)), Eq(Y(x), sqrt(C1 + x**2))]
+    ok("ode", r"\frac{dy}{dx}=\frac{x}{y}", right, wrong)
+
+
 def test_verifier_exception_is_false():
     assert verify("solve", parse_problem("x=1"), res(["junk"]), x) is False
     assert verify("nonsense-op", parse_problem("x=1"), res([1]), x) is False

@@ -13,6 +13,9 @@ MINUS = "−"
 class _TextPrinter(StrPrinter):
     def _print_Symbol(self, expr):
         name = expr.name
+        m = re.fullmatch(r"([A-Za-z]+)(\d+)", name)     # C1 -> C₁
+        if m and name not in GREEK:
+            name = m.group(1) + "_" + m.group(2)
         base, sub = (name.split("_", 1) + [""])[:2] if "_" in name else (name, "")
         base = GREEK.get(base, base)
         sub = "".join("₀₁₂₃₄₅₆₇₈₉"[int(c)] if c.isdigit() else c for c in sub)

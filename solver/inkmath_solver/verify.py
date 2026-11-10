@@ -339,7 +339,8 @@ def verify_series(p, r, var):
 
 def verify_ode(p, r, var):
     eq, Y = ode_equation(p.expr, var)
-    return checkodesol(eq, r.value, Y)[0] is True
+    sols = r.value if isinstance(r.value, (list, tuple)) else [r.value]
+    return bool(sols) and all(checkodesol(eq, s, Y)[0] is True for s in sols)
 
 
 VERIFIERS = {
