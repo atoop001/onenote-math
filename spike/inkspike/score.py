@@ -12,11 +12,79 @@ from typing import Protocol
 
 _TOKEN = re.compile(r"\\[a-zA-Z]+|\\.|\S")
 _DROP = {r"\,", r"\;", r"\!", r"\:", r"\ ", r"\left", r"\right", r"\mathrm", r"\mathit",
-         r"\quad", r"\qquad", r"\displaystyle"}
-_ALIAS = {r"\dfrac": r"\frac", r"\tfrac": r"\frac", r"\le": r"\leq", r"\ge": r"\geq"}
-_FUNCS = {r"\sin", r"\cos", r"\tan", r"\sec", r"\csc", r"\cot", r"\arcsin", r"\arccos",
-          r"\arctan", r"\sinh", r"\cosh", r"\tanh", r"\ln", r"\log", r"\exp"}
+         r"\operatorname", r"\limits", r"\nolimits", r"\quad", r"\qquad", r"\displaystyle"}
+_ALIAS = {r"\dfrac": r"\frac", r"\tfrac": r"\frac", r"\le": r"\leq", r"\ge": r"\geq",
+          r"\rightarrow": r"\to", r"\prime": "'"}
+_PRIME = re.compile(r"\^\s*\{\s*('+)\s*\}|\^\s*(')")  # f^{'} and f^' are f'
+_FUNC_NAMES = ["arcsin", "arccos", "arctan", "sinh", "cosh", "tanh", "sin", "cos", "tan",
+               "sec", "csc", "cot", "log", "lim", "exp", "ln"]  # longest first
+_FUNCS = {"\\" + n for n in _FUNC_NAMES if n != "lim"}
+# A brace group right after one of these is an argument and must be kept.
+_ARG_TAKERS = {"^", "_", "}", "]", r"\frac", r"\sqrt", r"\binom", r"\text"}
+# Every multi-row layout (a system written as two stacked lines) reads the same in the confirm box.
+_ENV_BEGIN = re.compile(r"\\begin\{(?:matrix|cases|array|aligned|gathered|split|align\*?)\}(?:\{[lcr|]*\})?")
+_ENV_END = re.compile(r"(?:\\\\\s*)?\\end\{(?:matrix|cases|array|aligned|gathered|split|align\*?)\}")
 STRUCTURAL = {"^", "_", "{", "}", r"\frac"}
+
+
+def _merge_function_letters(tokens: list[str]) -> list[str]:
+    """Readers often spell functions as plain letters (lnx, log1000): treat them as \\ln, \\log."""
+    out, i = [], 0
+    while i < len(tokens):
+        for name in _FUNC_NAMES:
+            if "".join(tokens[i:i + len(name)]) == name and all(len(t) == 1 for t in tokens[i:i + len(name)]):
+                out.append("\\" + name)
+                i += len(name)
+                break
+        else:
+            out.append(tokens[i])
+            i += 1
+    return out
+
+
+def _match(tokens: list[str], i: int, open_: str, close: str) -> int:
+    """Index of the token closing the group opened at i, or -1."""
+    depth = 0
+    for j in range(i, len(tokens)):
+        depth += (tokens[j] == open_) - (tokens[j] == close)
+        if depth == 0:
+            return j
+    return -1
+
+
+def _operand_end(tokens: list[str], i: int) -> int:
+    """Index just past one operand starting at i: a token, a {group}, \\frac A B or \\sqrt A. -1 if none."""
+    if i >= len(tokens) or tokens[i] in ("}", ")"):
+        return -1
+    if tokens[i] == "{":
+        j = _match(tokens, i, "{", "}")
+        return j + 1 if j > 0 else -1
+    n_args = {r"\frac": 2, r"\sqrt": 1}.get(tokens[i], 0)
+    j = i + 1
+    for _ in range(n_args):
+        j = _operand_end(tokens, j)
+        if j < 0:
+            return -1
+    return j
+
+
+def _is_atom(content: list[str]) -> bool:
+    return bool(content) and _operand_end(content, 0) == len(content)
+
+
+def _strip_groups(tokens: list[str]) -> tuple[list[str], bool]:
+    """Drop braces that only group (not arguments) and parens around one atom after a function."""
+    for i, t in enumerate(tokens):
+        prev = tokens[i - 1] if i else None
+        if t == "{" and prev not in _ARG_TAKERS:
+            j = _match(tokens, i, "{", "}")
+            if j > 0:
+                return tokens[:i] + tokens[i + 1:j] + tokens[j + 1:], True
+        if t == "(" and prev in _FUNCS:
+            j = _match(tokens, i, "(", ")")
+            if j > 0 and _is_atom(tokens[i + 1:j]):
+                return tokens[:i] + tokens[i + 1:j] + tokens[j + 1:], True
+    return tokens, False
 
 
 def _strip_single(tokens: list[str], open_: str, close: str, only_after=None) -> tuple[list[str], bool]:
@@ -35,12 +103,16 @@ def _strip_single(tokens: list[str], open_: str, close: str, only_after=None) ->
 
 
 def normalize(latex: str) -> list[str]:
+    latex = _ENV_END.sub(r" \\endrows ", _ENV_BEGIN.sub(r" \\rows ", latex))
+    latex = _PRIME.sub(lambda m: m.group(1) or m.group(2), latex.replace(r"\prime", "'"))
     tokens = [_ALIAS.get(t, t) for t in _TOKEN.findall(latex) if t not in _DROP]
+    tokens = _merge_function_letters(tokens)
     changed = True
     while changed:
         tokens, c1 = _strip_single(tokens, "{", "}")
         tokens, c2 = _strip_single(tokens, "(", ")", only_after=_FUNCS)
-        changed = c1 or c2
+        tokens, c3 = _strip_groups(tokens)
+        changed = c1 or c2 or c3
     return tokens
 
 

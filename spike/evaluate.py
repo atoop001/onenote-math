@@ -75,7 +75,7 @@ def main() -> int:
     suffix = "-tuned" if args.weights else ""
     out = ROOT / "data" / "reports" / f"{args.model}{suffix}.md"
     s = run_eval(rec, prompts, ROOT / "data" / "ink", args.set, out)
-    print(f"{args.model}{suffix}: zero {_pct(s['zero_rate'])}, ≤2 {_pct(s['le2_rate'])}, "
+    print(f"{args.model}{suffix}: zero {_pct(s['zero_rate'])}, <=2 {_pct(s['le2_rate'])}, "
           f"passed={s['passed']}, median {s['median_ms']:.0f} ms. Report: {out}")
     return 0
 
