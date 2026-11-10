@@ -22,6 +22,11 @@ def _paren(e) -> str:
     return "(%s)" % s if isinstance(e, Add) else s
 
 
+def _den(e) -> str:
+    s = t(e)
+    return "(%s)" % s if isinstance(e, (Add, Mul)) else s
+
+
 def _num(e):
     try:
         v = complex(N(e, 30))
@@ -62,8 +67,15 @@ def excluded_values(expr) -> list[str]:
     return out
 
 
+def _sort_key(z):
+    if z.free_symbols:                      # symbolic answer, e.g. y = 3 − x
+        return (1, 0.0, 0.0, str(z))
+    re_, im_ = N(z).as_real_imag()
+    return (0, float(re_), float(im_), "")
+
+
 def _sorted(sols):
-    return sorted(sols, key=lambda z: (float(N(z).as_real_imag()[0]), float(N(z).as_real_imag()[1])))
+    return sorted(sols, key=_sort_key)
 
 
 def _solutions_answer(var, sols) -> Answer:
@@ -359,7 +371,7 @@ def run_simplify(p: Problem, var=None, point=None) -> OpResult:
             result = cancel(result)
     num, den = fraction(orig)
     if den.free_symbols:
-        steps = [f"Factor numerator and denominator: {_paren(factor(num))}/{_paren(factor(den))}",
+        steps = [f"Factor numerator and denominator: {_paren(factor(num))}/{_den(factor(den))}",
                  "Cancel common factors"]
     elif orig.has(TrigonometricFunction):
         steps = ["Apply trig identities"]
@@ -380,7 +392,7 @@ def run_factor(p: Problem, var=None, point=None) -> OpResult:
             r1, r2 = sorted(-r for r in roots)
             steps = [f"Find two numbers that multiply to {t(c)} and add to {t(b)}: {t(r1)}, {t(r2)}"]
         elif b == 0 and c.is_negative:
-            steps = [f"Difference of squares: {t(Pow(sqrt(a * syms[0]**2), 2, evaluate=False))} − "
+            steps = [f"Difference of squares: {t(Pow(sqrt(a) * syms[0], 2, evaluate=False))} − "
                      f"{t(Pow(sqrt(-c), 2, evaluate=False))}"]
     elif len(Add.make_args(e)) == 2 and any(c.could_extract_minus_sign() for c in Add.make_args(e)):
         steps = ["Difference of squares"]

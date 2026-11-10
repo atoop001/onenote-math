@@ -24,6 +24,10 @@ def test_solve():
     ok("solve", "3x-7=11", [Integer(6)], [Integer(5)])
 
 
+def test_solve_for_one_letter_of_several():
+    ok("solve", "x+y=3", [3 - x], [3 + x], y)
+
+
 def test_solve_no_real_solutions():
     ok("solve", "x^2+1=0", [], [Integer(1)])
     assert verify("solve", parse_problem("x^2-1=0"), res([]), x) is False

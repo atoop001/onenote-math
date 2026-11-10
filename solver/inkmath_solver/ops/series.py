@@ -4,7 +4,7 @@ from sympy import (AccumBounds, Abs, N, Pow, S, Sum, Symbol, combsimp, integrate
 
 from ..problem import Problem
 from ..schema import Answer
-from ..textfmt import to_text as t
+from ..textfmt import decimal_of, to_text as t
 from .base import CannotSolve, OpResult
 
 
@@ -127,4 +127,4 @@ def run_series(p: Problem, var, point=None) -> OpResult:
         text, tex = "Converges", r"\text{Converges}"
     else:
         text, tex = "Diverges", r"\text{Diverges}"
-    return OpResult((conv, total), Answer(tex, text, None), steps, [])
+    return OpResult((conv, total), Answer(tex, text, decimal_of(total) if total is not None else None), steps, [])

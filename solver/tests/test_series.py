@@ -51,3 +51,8 @@ def test_all_corpus_series_verify():
             q = parse_problem(p["latex"])
             r = run(p["latex"], run_series)
             assert verify("series", q, r, q.symbols[0]), p["id"]
+
+
+def test_sum_has_decimal_and_readable_name():
+    r = run(r"\sum_{n=1}^{\infty}\frac{1}{n^3}", run_series)
+    assert r.answer.text == "Converges; sum = ζ(3)" and r.answer.decimal == "1.20206"

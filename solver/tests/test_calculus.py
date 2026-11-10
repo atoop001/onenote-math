@@ -81,3 +81,20 @@ def test_answers_pass_verification(op, fn, latex):
     p = parse_problem(latex)
     r = run(latex, fn)
     assert verify(op, p, r, p.symbols[0])
+
+
+def test_power_is_not_partial_fractions():
+    assert run(r"\int_{1}^{\infty}\frac{1}{x^2}dx", run_integrate).steps[0] == "Basic antiderivative rules"
+
+
+def test_textbook_substitution_for_log_over_x():
+    assert run(r"\int_{1}^{e}\frac{\ln x}{x}dx", run_integrate).steps[0] == "Substitution: u = ln(x)"
+
+
+def test_no_phase_shift_forms():
+    assert "π" not in run(r"\int e^x\cos x\,dx", run_integrate).answer.text
+    assert "π" not in run(r"\frac{d}{dx}e^{-x}\sin x", run_derivative).answer.text
+
+
+def test_partial_fractions_answer_is_clean():
+    assert run(r"\int\frac{x+7}{x^2-x-6}dx", run_integrate).answer.text == "2ln(x − 3) − ln(x + 2) + C"

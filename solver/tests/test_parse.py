@@ -91,3 +91,9 @@ def test_garbage_raises():
 def test_all_120_prompts_parse():
     for p in load_all_prompts():
         parse_problem(p["latex"])  # must not raise
+
+
+def test_decimals_become_exact():
+    from sympy import Rational
+    assert parse_problem(r"\log0.01").expr == -2
+    assert parse_problem("0.5x=1").expr.lhs == Rational(1, 2) * Symbol("x")

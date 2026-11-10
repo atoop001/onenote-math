@@ -2,7 +2,7 @@
 import re
 import warnings
 
-from sympy import E, Derivative, Eq, I, Integral, Limit, Sum, Symbol, Tuple, pi
+from sympy import E, Derivative, Eq, I, Integral, Limit, Sum, Symbol, Tuple, nsimplify, pi
 from sympy.core.function import AppliedUndef
 from sympy.core.relational import Relational
 
@@ -59,6 +59,8 @@ def _rebuild(e, sum_vars: set, evaluate: bool = True):
         if e.name == "i" and "i" not in sum_vars:
             return I
         return e
+    if e.is_Float:
+        return nsimplify(e, rational=True)       # 0.01 -> 1/100, so log(0.01) = -2 exactly
     if e.is_Atom:
         return e
     args = [_rebuild(a, sum_vars, evaluate) for a in e.args]

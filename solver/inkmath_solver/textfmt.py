@@ -21,6 +21,27 @@ class _TextPrinter(StrPrinter):
         sub = "".join("₀₁₂₃₄₅₆₇₈₉"[int(c)] if c.isdigit() else c for c in sub)
         return base + sub
 
+    def _print_Dummy(self, expr):
+        return self._print_Symbol(expr)
+
+    def _arc(self, name, expr):
+        return "%s(%s)" % (name, self._print(expr.args[0]))
+
+    def _print_asin(self, expr):
+        return self._arc("arcsin", expr)
+
+    def _print_acos(self, expr):
+        return self._arc("arccos", expr)
+
+    def _print_atan(self, expr):
+        return self._arc("arctan", expr)
+
+    def _print_acot(self, expr):
+        return self._arc("arccot", expr)
+
+    def _print_zeta(self, expr):
+        return "ζ(%s)" % self._print(expr.args[0])
+
     def _print_Pi(self, expr):
         return "π"
 

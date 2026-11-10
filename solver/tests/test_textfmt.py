@@ -21,3 +21,10 @@ def test_to_text(obj, text):
                                  (sqrt(2)/2, "0.707107"), (x + 1, None), (oo, None)])
 def test_decimal_of(v, d):
     assert decimal_of(v) == d
+
+
+def test_readable_names():
+    from sympy import Dummy, asin, atan, zeta
+    assert to_text(2 * Dummy("theta")) == "2θ"
+    assert to_text(asin(x / 3)) == "arcsin(x/3)" and to_text(atan(x)) == "arctan(x)"
+    assert to_text(zeta(3)) == "ζ(3)"

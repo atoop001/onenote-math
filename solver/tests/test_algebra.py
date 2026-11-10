@@ -106,3 +106,11 @@ def test_answers_pass_verification(latex):
     p = parse_problem(latex)
     r = run_solve(p, p.symbols[0], None)
     assert verify("solve", p, r, p.symbols[0])
+
+
+def test_fraction_steps_are_unambiguous():
+    assert run(r"\frac{x^3y^2}{xy^4}", run_simplify).steps[0] == "Factor numerator and denominator: x³y²/(xy⁴)"
+
+
+def test_difference_of_squares_step():
+    assert run("4x^2-9", run_factor).steps[0] == "Difference of squares: (2x)² − 3²"

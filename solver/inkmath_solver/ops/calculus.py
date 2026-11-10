@@ -1,7 +1,8 @@
 """Derivatives, implicit derivatives, limits, integrals, ODEs — each names its method (spec §6.4)."""
 from sympy import (AccumBounds, Add, Derivative, Eq, Function, Integral, Limit, Mul, Pow, S, Symbol, apart,
                    cancel, classify_ode, diff, dsolve, factor_list, fraction, idiff, integrate, latex, limit,
-                   oo, simplify, sin, sqrt, together)
+                   expand, factor_terms, oo, pi, simplify, sin, sqrt, together)
+from sympy.functions.elementary.trigonometric import TrigonometricFunction
 from sympy.core.function import AppliedUndef
 from sympy.functions.elementary.trigonometric import InverseTrigonometricFunction
 from sympy.integrals.manualintegrate import (AddRule, AlternativeRule, ConstantTimesRule, CyclicPartsRule,
@@ -61,7 +62,8 @@ def run_derivative(p: Problem, var, point=None) -> OpResult:
         f, x = p.expr.expr, p.expr.variables[0]
     else:
         f, x = p.expr, var
-    d = simplify(diff(f, x))
+    raw = diff(f, x)
+    d = _nicest(simplify(raw), factor_terms(expand(raw)), raw)
     steps = [_rule_step(f, x), "Simplify"]
     if p.kind == "function_def":
         text = f"{_prime_name(p.func_name)}({t(x)}) = {t(d)}"
@@ -158,7 +160,8 @@ def _pick(rule, f):
             if prefer_parts and parts:
                 rule = parts[0]
             elif subs:   # textbook choice: the simplest inner u (x², not e^(x²))
-                rule = min(subs, key=lambda a: (a.u_func.count_ops(), len(str(a.u_func))))
+                rule = min(subs, key=lambda a: (_has_negative_power(a.u_func), a.u_func.count_ops(),
+                                                len(str(a.u_func))))
             else:
                 rule = alts[0]
         elif isinstance(rule, AddRule):
@@ -168,6 +171,18 @@ def _pick(rule, f):
             rule = rich[0]
         else:
             return rule
+
+
+def _has_negative_power(e) -> bool:
+    return any(p.exp.is_negative for p in ([e] if isinstance(e, Pow) else []) + list(e.atoms(Pow)))
+
+
+def _nicest(*candidates):
+    """Shortest form, but never the phase-shift form √2·sin(x + π/4) a student wouldn't recognise."""
+    def phase(e):
+        return any(a.has(pi) and a.has(*e.free_symbols) for f in e.atoms(TrigonometricFunction) for a in f.args)
+    ok = [c for c in candidates if c is not None and not phase(c)] or [c for c in candidates if c is not None]
+    return min(ok, key=lambda c: (c.count_ops(), len(str(c))))
 
 
 def _has_dontknow(rule) -> bool:
@@ -186,8 +201,8 @@ def _technique(f, x) -> tuple[str, bool]:
     if f.is_rational_function(x):
         num, den = fraction(together(f))
         if den.has(x) and den.as_poly(x).degree() >= 2:
-            facs = factor_list(den)[1]
-            if len(facs) > 1 or any(m > 1 for _, m in facs):
+            facs = [g for g, _ in factor_list(den)[1] if g.has(x)]
+            if len(facs) >= 2:      # two different factors; 1/x² is just the power rule
                 return f"Partial fractions: {t(apart(f, x))}", True
     rule = integral_steps(f, x)
     usable = not _has_dontknow(rule)
@@ -221,7 +236,10 @@ def _technique(f, x) -> tuple[str, bool]:
 
 def _antiderivative(f, x):
     step, usable = _technique(f, x)
-    F = manualintegrate(f, x) if usable else None
+    if step.startswith("Partial fractions"):
+        F = manualintegrate(apart(f, x), x)       # term by term: 2ln(x − 3) − ln(x + 2)
+    else:
+        F = manualintegrate(f, x) if usable else None
     if F is None or F.has(Integral):
         F = integrate(f, x)
         if not usable:
@@ -231,7 +249,7 @@ def _antiderivative(f, x):
     if F.is_polynomial(x):
         F = F.expand()          # 2x³ − 2x, not 2x(x² − 1)
     elif F.count_ops() < 60:
-        F = simplify(F)
+        F = _nicest(F, simplify(F), factor_terms(F))
     return F, step
 
 
