@@ -29,7 +29,7 @@ This add-in exists to fix exactly those two failures. Handwriting accuracy on *t
 The user would abandon the add-in mid-session for these, **in this priority order**:
 
 1. **Too many corrections.** Target: most problems need zero taps in the confirm box; a messy problem needs at most 1–2 fixes.
-2. **Too slow.** Target: under 3 s from tapping Solve to the confirm box appearing; under 5 s more from confirming to the answer on the page. Solver work that exceeds ~10 s is stopped with a plain message ("This one's taking too long"). Never hang OneNote.
+2. **Too slow.** Target: under 3 s from tapping Solve to the confirm box appearing; under 5 s more from confirming to the answer on the page. Solver work that exceeds 20 s (user's decision) is stopped with a plain message ("This one's taking too long"). Never hang OneNote.
 3. **Confidently wrong.** Every answer is independently verified (see §6.5). If verification fails or is impossible, the answer carries a visible "⚠ unverified" mark.
 
 Also: never cover the page with a modal pop-up, never move or alter the user's ink, never leave clutter beyond the inserted answer.
@@ -103,7 +103,7 @@ Reference mockups (user reviewed and chose B as primary, A as fallback): https:/
   - Derivatives: rule names (chain, product, quotient, implicit).
   - Algebra: custom step generation ("factor," "subtract 3 from both sides"). Expected to be the roughest area at first; acceptable.
   - Series: name of the convergence test applied and its conclusion.
-- Hard timeout ~10 s, with the plain message from §3.
+- Hard timeout 20 s, with the plain message from §3.
 
 ### 6.5 Verification ("never confidently wrong")
 
