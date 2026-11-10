@@ -9,7 +9,7 @@
     ]},
     { "id": "M1", "title": "Handwriting accuracy spike + gate", "steps": [
       { "title": "Scaffold and prompt sets", "done": true },
-      { "title": "Prompt pages in OneNote", "done": false },
+      { "title": "Prompt pages in OneNote", "done": true },
       { "title": "User writes samples on Surface", "done": false },
       { "title": "Ink extraction and rendering", "done": false },
       { "title": "Scoring harness", "done": false },
