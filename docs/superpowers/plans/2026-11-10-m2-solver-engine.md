@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** An offline Python solver that takes confirmed LaTeX, either asks which operation to run or solves it, gives key steps, an exact answer and a decimal, and checks the answer a second way. It runs behind a JSON-lines process with a hard 20 s timeout.
+**Goal:** An offline Python solver that takes confirmed LaTeX, either asks which operation to run or solves it, gives key steps, an exact answer and a decimal, and checks the answer a second way. It runs behind a JSON-lines process that checks in every 20 s ("Keep going or stop?") and can be stopped at any time.
 
-**Architecture:** The package `solver/inkmath_solver` is a pipeline: `parse` (LaTeX to a `Problem`), then `infer` (pick the operation or ask), then `ops/*` (SymPy work plus key steps, giving an `OpResult`), then `verify` (an independent check), then `engine` (assembles the `Response`). `server` reads requests on stdin and writes responses on stdout. Each request runs in a warm child process that is killed and respawned on timeout or crash, so a slow solve never blocks the caller. M3's C# add-in launches the server; M5's confirm panel uses `needs_operation` and `choices`.
+**Architecture:** The package `solver/inkmath_solver` is a pipeline: `parse` (LaTeX to a `Problem`), then `infer` (pick the operation or ask), then `ops/*` (SymPy work plus key steps, giving an `OpResult`), then `verify` (an independent check), then `engine` (assembles the `Response`). `server` reads requests on stdin and writes responses on stdout. Each request runs in a warm child process. The server stays responsive while the child works. After 20 s it asks the caller whether to keep going. On a stop or a crash it kills the child and respawns it, so a slow solve never blocks the caller. M3's C# add-in launches the server; M5's confirm panel uses `needs_operation` and `choices`.
 
 **Tech Stack:** Python 3.10 (`C:\Python310`), SymPy 1.14.0, mpmath (comes with SymPy), antlr4-python3-runtime 4.11.1 (SymPy's LaTeX parser backend), pytest.
 
@@ -14,7 +14,11 @@
 
 - **Offline.** No network calls, ever.
 - **Pure-Python dependencies only** (`sympy==1.14.0`, `antlr4-python3-runtime==4.11.1`, `mpmath`), so M6 can ship an embedded Python on the Surface ("no system Python required").
-- **Hard timeout 20 s per request.** On timeout the response message is exactly `This one's taking too long`. Never hang the caller.
+- **Check-in every 20 s, with stop at any time** (spec §3, revised 2026-11-10):
+  - Every 20 s of solving, the server sends `still_working` with the message exactly `This one's taking a while. Keep going or stop?` and keeps computing.
+  - `continue` resets the 20 s clock.
+  - `stop`, accepted at any moment, kills the work and answers `stopped` with the message `Stopped.`
+  - Never hang the caller.
 - **Key steps:** 3–5 lines in total, made of method, main intermediate result, and answer. The `steps` list holds 1–4 lines and the answer is separate.
 - **Answers:** exact form plus a decimal where meaningful. The decimal has 6 significant digits and is shown when the value is a number that is not an integer.
 - **Conventions (spec §7):** `\log` means base 10 and `\ln` means natural log. Real solutions only, unless `i` appears in the problem. Trig equations give the general solution plus the solutions on [0, 2π). Domain restrictions go in words in `notes` (e.g. `x ≠ 2`). Indefinite integrals end in `+ C`. `e` is Euler's number. `i` is the imaginary unit unless it is a summation index.
@@ -29,7 +33,12 @@
 2. **No real solution** (`x^2+1=0`) must answer "No real solutions" with status `ok`. It must not answer with complex roots or an error. Test in Task 5.
 3. **Undefined values** (`\frac{1}{0}`, `\ln 0`, `\lim_{x\to0}\frac{1}{x}`) must answer "undefined" or "does not exist" in words. It must never print `zoo` or `nan`, and it must not crash. Tests in Tasks 5 and 6.
 4. **Divergent improper integral** (`\int_{0}^{1}\frac{1}{x}dx`) must answer "Diverges". It must not show `∞` as if it were a value or claim a finite answer. Test in Task 6.
-5. **Worker crash or garbage input** (a malformed JSON line, or a child process that dies) must get an `error` response, and the server keeps serving the next request. Test in Task 9.
+5. **Worker crash, garbage input, or confused control lines** (a malformed JSON line, a child process that dies, a `stop` for an id that isn't running, a new request sent while one is still working) get these responses, and the server keeps serving:
+   - a malformed line or a crash: `error`;
+   - a stale `stop`: ignored, with a note on stderr;
+   - a new request during a solve: queued and answered after.
+
+   Test in Task 9.
 
 ---
 
@@ -40,7 +49,8 @@
 ```python
 OPERATIONS = ("simplify", "factor", "expand", "solve", "solve_system", "evaluate", "evaluate_at",
               "derivative", "implicit_derivative", "integrate", "limit", "series", "identity", "ode")
-STATUSES = ("ok", "needs_operation", "cannot_parse", "cannot_solve", "timeout", "error")
+STATUSES = ("ok", "needs_operation", "cannot_parse", "cannot_solve", "still_working", "stopped", "error")
+CONTROLS = ("continue", "stop")   # control lines: {"id": "<request id>", "control": "continue" | "stop"}
 
 @dataclass
 class Request:
@@ -503,7 +513,7 @@ def test_answers(latex, text): assert run(latex, run_series).answer.text == text
 
 **Interfaces:**
 - Consumes: everything above.
-- Produces: `handle(req: Request) -> Response`. It never raises: any unexpected exception gives `status: error` with the message `Something went wrong solving this`. It does not time itself out (Task 9 does that).
+- Produces: `handle(req: Request) -> Response`. It never raises: any unexpected exception gives `status: error` with the message `Something went wrong solving this`. It has no clock of its own; Task 9's server handles check-ins and stopping.
 
 Flow:
 1. Parse. A `ParseError` gives `cannot_parse` with its message.
@@ -546,7 +556,7 @@ def test_corpus_all_120():
 - [ ] **Step 4: Run the tests,** including `-m corpus`. Expected: pass. Any corpus item that only reaches `cannot_solve` must be a series item; list them in the commit message.
 - [ ] **Step 5: Commit.** Message: `solver: engine (parse, infer, run, verify)`.
 
-### Task 9: Server with warm worker and 20 s timeout
+### Task 9: Server with warm worker, 20 s check-in, and stop
 
 **Files:**
 - Create: `solver/inkmath_solver/server.py`, `solver/inkmath_solver/__main__.py`, `solver/inkmath_solver/bench.py`
@@ -554,12 +564,23 @@ def test_corpus_all_120():
 
 **Interfaces:**
 - Consumes: `handle`, `request_from_json`, `response_to_json`.
-- Produces the process protocol M3 uses: `python -m inkmath_solver [--timeout 20]`. It reads one JSON request per line on stdin and writes one JSON response per line on stdout, in the same order and with the same `id`. It writes nothing else to stdout (logs go to stderr). It prints the line `{"ready": true}` once the worker is warm. EOF on stdin exits cleanly.
+- Produces the process protocol that M3 and M5 use: `python -m inkmath_solver [--checkin 20]`.
+  - **Lines in (stdin):** one JSON object per line. Each is either a request (`Request` fields) or a control line, `{"id": "<request id>", "control": "continue" | "stop"}`.
+  - **Lines out (stdout):** one JSON object per line. A request gets zero or more `still_working` lines, then exactly one final response (`ok`, `needs_operation`, `cannot_parse`, `cannot_solve`, `stopped` or `error`), all carrying its `id`.
+  - Nothing else goes to stdout; logs go to stderr.
+  - The server prints `{"ready": true}` once the worker is warm.
+  - EOF on stdin stops any running work and exits cleanly.
 
 **Design.**
 - The server process stays light: it does not import SymPy.
-- It keeps one `multiprocessing` child (spawn context) that has already imported SymPy and `engine` and warmed the parser on `x+1`. Requests go to the child over a `Pipe`.
-- **Timeout:** `conn.poll(timeout)` returns False. Terminate the child and respond `timeout` with the message `This one's taking too long`. Start a new child at once, so the next request finds it warming or warm.
+- A reader thread puts each stdin line on a queue, so the main loop can watch the worker and stdin at the same time.
+- The server keeps one `multiprocessing` child (spawn context). The child has already imported SymPy and `engine` and warmed the parser on `x+1`. Requests go to it over a `Pipe`.
+- **Check-in:** the main loop polls the pipe in short slices (0.1 s) and drains the queue between slices.
+  - Every `--checkin` seconds without a result, it writes `{"id", "status": "still_working", "message": "This one's taking a while. Keep going or stop?"}` and **keeps computing**.
+  - `continue` for the running id resets the clock.
+  - With no reply, the worker keeps computing, and the next check-in is sent after another `--checkin` seconds. The panel (M5) owns the question; the server never kills work by itself.
+- **Stop:** `stop` for the running id, accepted at any time, terminates the child. The server answers `{"status": "stopped", "message": "Stopped."}` and starts a new child at once.
+- **Queueing:** a new request that arrives during a solve waits in order. A control line for an id that isn't running is ignored, with a note on stderr.
 - **Child crash:** an `EOFError` or a dead process gives `error` with `Something went wrong solving this`, and the child respawns.
 - **Bad JSON or unknown operation:** respond `error` with `id` `""` (or the id if it can be read) and keep going.
 
@@ -571,11 +592,29 @@ def ask(p, obj): p.stdin.write(json.dumps(obj) + "\n"); p.stdin.flush(); return 
 
 def test_roundtrip():
     p = start(); r = ask(p, {"id": "a", "latex": "3x-7=11"}); assert r["id"] == "a" and r["answer"]["text"] == "x = 6"; p.stdin.close(); assert p.wait(10) == 0
-def test_timeout_then_recovers():
-    p = start("--timeout", "1")
-    t = time.monotonic(); r = ask(p, {"id": "slow", "latex": r"\int e^{x^2}\sin(x^3)\cos(\sqrt{x})dx", "operation": "integrate"})
-    assert r["status"] == "timeout" and r["message"] == "This one's taking too long" and time.monotonic() - t < 3
+SLOW = {"id": "slow", "latex": r"\int e^{x^2}\sin(x^3)\cos(\sqrt{x})dx", "operation": "integrate"}
+def send(p, obj): p.stdin.write(json.dumps(obj) + "\n"); p.stdin.flush()
+def read(p): return json.loads(p.stdout.readline())
+
+def test_checkin_asks_and_keeps_working():
+    p = start("--checkin", "1"); send(p, SLOW)
+    r = read(p); assert r["status"] == "still_working" and r["message"] == "This one's taking a while. Keep going or stop?"
+    send(p, {"id": "slow", "control": "continue"})
+    assert read(p)["status"] == "still_working"          # asked again after another second: still computing
+def test_stop_then_recovers():
+    p = start("--checkin", "1"); send(p, SLOW); assert read(p)["status"] == "still_working"
+    t = time.monotonic(); send(p, {"id": "slow", "control": "stop"})
+    r = read(p); assert r["status"] == "stopped" and r["message"] == "Stopped." and time.monotonic() - t < 2
     assert ask(p, {"id": "b", "latex": "3x-7=11"})["status"] == "ok"
+def test_stop_before_checkin():
+    p = start("--checkin", "20"); send(p, SLOW); send(p, {"id": "slow", "control": "stop"})
+    assert read(p)["status"] == "stopped"
+def test_request_queued_during_solve():
+    p = start("--checkin", "1"); send(p, SLOW); send(p, {"id": "q", "latex": "x+1=2"})
+    assert read(p)["status"] == "still_working"; send(p, {"id": "slow", "control": "stop"})
+    assert read(p)["status"] == "stopped" and read(p)["id"] == "q"
+def test_stale_control_ignored():
+    p = start(); send(p, {"id": "nope", "control": "stop"}); assert ask(p, {"id": "f", "latex": "x+1=2"})["id"] == "f"
 def test_bad_json_keeps_serving():
     p = start(); p.stdin.write("not json\n"); p.stdin.flush(); assert json.loads(p.stdout.readline())["status"] == "error"
     assert ask(p, {"id": "c", "latex": "x+1=2"})["status"] == "ok"
@@ -585,17 +624,18 @@ def test_worker_crash_recovers():
     assert ask(p, {"id": "e", "latex": "x+1=2"})["status"] == "ok"
 ```
 
-  For `kill_worker_child(p)`, the server logs `worker pid <n>` to stderr each time it spawns, so start the process with `stderr=PIPE`. The test reads that line and runs `taskkill /F /PID <n>`. For the slow-integral test: if that integral finishes in under 1 s on the dev machine, swap in any request that takes over 2 s, and note the swap in the commit message.
+  For `kill_worker_child(p)`, the server logs `worker pid <n>` to stderr each time it spawns, so start the process with `stderr=PIPE`. The test reads that line and runs `taskkill /F /PID <n>`. For `SLOW`: it must run for more than 5 s on the dev machine. If that integral finishes sooner, swap in any request that takes longer, and note the swap in the commit message.
 - [ ] **Step 2: Run and verify they fail.**
 - [ ] **Step 3: Implement** `server.py` and `__main__.py`.
 - [ ] **Step 4: Run the tests.** Expected: pass.
-- [ ] **Step 5: Implement `bench.py`.** `python -m inkmath_solver.bench --set ../samples/prompts_test.json` runs every prompt through one warm server (answering `needs_operation` with `choices[0]`). It prints one line per prompt with id, status, verified and ms, then the median ms, the maximum ms, and the count over 5 s. Run it on both sets. Expected: no `error` or `timeout`. Record the median and maximum in the commit message. The Surface estimate is the dev time × 1.75, and the target is under 5 s.
-- [ ] **Step 6: Commit.** Message: `solver: JSON-lines server with warm worker and 20 s timeout`. Mark M2's steps done in `.claude/progress.json`.
+- [ ] **Step 5: Implement `bench.py`.** `python -m inkmath_solver.bench --set ../samples/prompts_test.json` runs every prompt through one warm server (answering `needs_operation` with `choices[0]`). It prints one line per prompt with id, status, verified and ms, then the median ms, the maximum ms, and the count over 5 s. Run it on both sets. Expected: no `error` and no `still_working` (nothing in the corpus takes 20 s). Record the median and maximum in the commit message. The Surface estimate is the dev time × 1.75, and the target is under 5 s.
+- [ ] **Step 6: Commit.** Message: `solver: JSON-lines server with warm worker, 20 s check-in, stop`. Mark M2's steps done in `.claude/progress.json`.
 
 ---
 
 ## Notes for later milestones (not tasks here)
 
-- **M3:** launch `python -m inkmath_solver` once per OneNote session, wait for `{"ready": true}`, and keep the process. Also apply your own 25 s read timeout as a backstop.
+- **M3:** launch `python -m inkmath_solver` once per OneNote session, wait for `{"ready": true}`, and keep the process. Read stdout on a background thread so OneNote's UI never waits. If no line, `still_working` or final, arrives within 25 s, treat the process as dead: kill it and restart it.
+- **M5:** on `still_working`, show "This one's taking a while. Keep going or stop?" with **Keep going** (sends `continue`) and **Stop** (sends `stop`) beside the page, never as a modal. The panel's Cancel button sends `stop` at any time.
 - **M4:** `clean_latex` is the vetted, meaning-preserving cleanup. Reuse it, and don't fork `spike/inkspike/score.normalize`.
 - **M6:** bundle an embedded Python 3.10 with this package's pinned dependencies. Re-run `bench.py` on the Surface.
