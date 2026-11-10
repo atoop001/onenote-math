@@ -69,6 +69,8 @@ _PRINTER = _TextPrinter()
 def to_text(obj) -> str:
     s = _PRINTER.doprint(obj)
     s = re.sub(r"(\d)\*(?=[^\d\s])", r"\1", s)   # 5*x -> 5x, 2*√2 -> 2√2
+    s = re.sub(r"\*(?=\()", "", s)                # (x + 2)*(x + 3) -> (x + 2)(x + 3)
+    s = re.sub(r"\*(?=[A-Za-zα-ωπ][^A-Za-z(]|[A-Za-zα-ωπ]$)", "", s)   # π*k -> πk, x*y -> xy
     s = s.replace("*", "·")
     return s.replace("-", MINUS)
 
