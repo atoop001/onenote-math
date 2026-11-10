@@ -5,10 +5,10 @@
   "milestones": [
     { "id": "M0", "title": "Design and plan", "steps": [
       { "title": "Design spec approved", "done": true },
-      { "title": "Roadmap and M1 plan approved", "done": false }
+      { "title": "Roadmap and M1 plan approved", "done": true }
     ]},
     { "id": "M1", "title": "Handwriting accuracy spike + gate", "steps": [
-      { "title": "Scaffold and prompt sets", "done": false },
+      { "title": "Scaffold and prompt sets", "done": true },
       { "title": "Prompt pages in OneNote", "done": false },
       { "title": "User writes samples on Surface", "done": false },
       { "title": "Ink extraction and rendering", "done": false },
