@@ -27,10 +27,15 @@ namespace InkMath.AddIn
         Control uiControl;
         object ribbon;
         bool pendingShowSteps = true;
+        int solvePending;
 
         public Connect() { }
 
-        internal Connect(ISolveController controller) { this.controller = controller; }
+        internal Connect(ISolveController controller, bool startWorker = false)
+        {
+            this.controller = controller;
+            if (startWorker) StartWorker();
+        }
 
         // ---------- IDTExtensibility2 ----------
 
@@ -55,11 +60,7 @@ namespace InkMath.AddIn
                 if (settings == null) Log.Info("no " + AddInSettings.FileName + " beside the add-in; the solver can't start");
                 solver = new SolverClient(new SolverSettings { PythonExe = settings?.PythonExe, SolverDir = settings?.SolverDir });
 
-                queue = new BlockingCollection<Action>();
-                var q = queue;
-                worker = new Thread(() => WorkerLoop(q)) { IsBackground = true, Name = "InkMath worker" };
-                worker.SetApartmentState(ApartmentState.STA);
-                worker.Start();
+                StartWorker();
 
                 var c = new SolveController(new LazyPage(), solver, new SelectionStore(), Changed) { ShowSteps = pendingShowSteps };
                 controller = c;
@@ -126,7 +127,14 @@ namespace InkMath.AddIn
             {
                 var c = controller;
                 if (c == null || c.Busy) return;
-                Enqueue(c.Solve);
+                // One solve at a time, counted from the tap: taps while one is queued or running are ignored.
+                if (Interlocked.CompareExchange(ref solvePending, 1, 0) != 0) return;
+                Changed();
+                Enqueue(() =>
+                {
+                    try { c.Solve(); }
+                    finally { Interlocked.Exchange(ref solvePending, 0); Changed(); }
+                });
             }
             catch (Exception e) { Log.Error("OnSolve", e); }
         }
@@ -166,7 +174,7 @@ namespace InkMath.AddIn
                 var c = controller;
                 switch (IdOf(control))
                 {
-                    case "solveButton": return c == null || !c.Busy;
+                    case "solveButton": return Volatile.Read(ref solvePending) == 0 && (c == null || !c.Busy);
                     case "keepGoingButton": return c != null && c.AwaitingCheckIn;
                     case "stopButton": return c != null && c.Busy;
                     default: return false;
@@ -200,7 +208,7 @@ namespace InkMath.AddIn
             return (string)d.Id;
         }
 
-        void Enqueue(Action a)
+        internal void Enqueue(Action a)
         {
             var q = queue;
             if (q == null || q.IsAddingCompleted)
@@ -209,6 +217,15 @@ namespace InkMath.AddIn
                 return;
             }
             q.Add(a);
+        }
+
+        void StartWorker()
+        {
+            queue = new BlockingCollection<Action>();
+            var q = queue;
+            worker = new Thread(() => WorkerLoop(q)) { IsBackground = true, Name = "InkMath worker" };
+            worker.SetApartmentState(ApartmentState.STA);
+            worker.Start();
         }
 
         static void WorkerLoop(BlockingCollection<Action> q)

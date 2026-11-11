@@ -19,6 +19,19 @@ namespace InkMath.Tests
         public void Invalidate() => Invalidated.Set();
     }
 
+    class BlockingController : ISolveController
+    {
+        public readonly System.Threading.ManualResetEventSlim Release = new System.Threading.ManualResetEventSlim();
+        public int Solves;
+        public bool ShowSteps { get; set; } = true;
+        public string Status => "";
+        public bool Busy { get; private set; }
+        public bool AwaitingCheckIn => false;
+        public void Solve() { System.Threading.Interlocked.Increment(ref Solves); Busy = true; Release.Wait(5000); Busy = false; }
+        public void KeepGoing() { }
+        public void Stop() { }
+    }
+
     class ThrowingController : ISolveController
     {
         static Exception E => new InvalidOperationException("boom");
@@ -139,6 +152,37 @@ namespace InkMath.Tests
             {
                 c.Changed();
                 Assert.True(ribbon.Invalidated.Wait(3000), "ribbon.Invalidate was never called");
+            }
+            finally
+            {
+                Array custom = new object[0];
+                c.OnBeginShutdown(ref custom);
+            }
+        }
+
+        [Fact]
+        public void Repeated_taps_queue_only_one_solve()
+        {
+            var ctl = new BlockingController();
+            var c = new Connect(ctl, startWorker: true);
+            var warmup = new System.Threading.ManualResetEventSlim();
+            try
+            {
+                c.Enqueue(() => warmup.Wait(5000));         // the worker is busy, e.g. starting the solver
+                c.OnSolve(Ctl("solveButton"));
+                Assert.False(c.GetEnabled(Ctl("solveButton")));
+                c.OnSolve(Ctl("solveButton"));
+                c.OnSolve(Ctl("solveButton"));
+                warmup.Set();
+                ctl.Release.Set();
+                var deadline = DateTime.UtcNow.AddSeconds(5);
+                while (!c.GetEnabled(Ctl("solveButton")) && DateTime.UtcNow < deadline) System.Threading.Thread.Sleep(20);
+                Assert.True(c.GetEnabled(Ctl("solveButton")));
+                Assert.Equal(1, ctl.Solves);
+                c.OnSolve(Ctl("solveButton"));
+                deadline = DateTime.UtcNow.AddSeconds(5);
+                while (ctl.Solves < 2 && DateTime.UtcNow < deadline) System.Threading.Thread.Sleep(20);
+                Assert.Equal(2, ctl.Solves);
             }
             finally
             {
