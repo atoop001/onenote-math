@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="InkMath.AddIn/InkMath.AddIn.csproj" />
+  <Project Path="InkMath.Tests/InkMath.Tests.csproj" />
+</Solution>

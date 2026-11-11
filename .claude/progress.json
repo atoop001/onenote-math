@@ -1,7 +1,7 @@
 {
   "version": 1,
   "project": "OneNote Ink Math",
-  "updated": "2026-11-10",
+  "updated": "2026-11-11",
   "milestones": [
     {
       "id": "M0",
@@ -98,7 +98,31 @@
       "title": "OneNote bridge (COM add-in)",
       "steps": [
         {
-          "title": "OneNote bridge (COM add-in)",
+          "title": "Scaffold and solver protocol",
+          "done": true
+        },
+        {
+          "title": "Read the lasso selection",
+          "done": false
+        },
+        {
+          "title": "Build the answer box",
+          "done": false
+        },
+        {
+          "title": "Talk to the solver",
+          "done": false
+        },
+        {
+          "title": "The Solve flow",
+          "done": false
+        },
+        {
+          "title": "OneNote add-in and Math tab",
+          "done": false
+        },
+        {
+          "title": "Setup script and checks",
           "done": false
         }
       ]
