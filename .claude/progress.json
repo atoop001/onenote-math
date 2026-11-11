@@ -103,26 +103,30 @@
         },
         {
           "title": "Read the lasso selection",
-          "done": false
+          "done": true
         },
         {
           "title": "Build the answer box",
-          "done": false
+          "done": true
         },
         {
           "title": "Talk to the solver",
-          "done": false
+          "done": true
         },
         {
           "title": "The Solve flow",
-          "done": false
+          "done": true
         },
         {
           "title": "OneNote add-in and Math tab",
-          "done": false
+          "done": true
         },
         {
           "title": "Setup script and checks",
+          "done": true
+        },
+        {
+          "title": "User runs the dev check in OneNote",
           "done": false
         }
       ]
