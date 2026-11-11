@@ -56,8 +56,40 @@
       "title": "Solver engine",
       "steps": [
         {
-          "title": "Solver engine",
-          "done": false
+          "title": "Scaffold, schema, text formatting",
+          "done": true
+        },
+        {
+          "title": "LaTeX parser",
+          "done": true
+        },
+        {
+          "title": "Operation inference",
+          "done": true
+        },
+        {
+          "title": "Independent verification",
+          "done": true
+        },
+        {
+          "title": "Algebra and precalc operations",
+          "done": true
+        },
+        {
+          "title": "Calculus operations",
+          "done": true
+        },
+        {
+          "title": "Series",
+          "done": true
+        },
+        {
+          "title": "Engine",
+          "done": true
+        },
+        {
+          "title": "Server with 20 s check-in and stop",
+          "done": true
         }
       ]
     },
