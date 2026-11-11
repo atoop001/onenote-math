@@ -1,0 +1,4 @@
+<?xml version="1.0"?>
+<one:Page xmlns:one="http://schemas.microsoft.com/office/onenote/2013/onenote" ID="{PAGE-3}" name="t">
+<one:Outline objectID="{O1}" selected="partial"><one:Position x="40" y="230" z="1"/><one:Size width="100" height="30"/><one:OEChildren><one:OE selected="partial"><one:InkParagraph selected="all"><one:InkWord recognizedText="x" selected="all"><one:Data>AAAA</one:Data></one:InkWord><one:InkWord recognizedText="y"><one:Data>AAAA</one:Data></one:InkWord></one:InkParagraph></one:OE></one:OEChildren></one:Outline>
+</one:Page>

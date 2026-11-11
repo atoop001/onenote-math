@@ -1,0 +1,5 @@
+<?xml version="1.0"?>
+<one:Page xmlns:one="http://schemas.microsoft.com/office/onenote/2013/onenote" ID="{PAGE-1}" name="t"><one:Title><one:OE><one:T><![CDATA[t]]></one:T></one:OE></one:Title>
+<one:Outline objectID="{O1}"><one:Position x="36" y="120" z="0"/><one:Size width="200" height="30"/><one:OEChildren><one:OE selected="all"><one:T selected="all"><![CDATA[3x-7=11]]></one:T></one:OE></one:OEChildren></one:Outline>
+<one:InkDrawing objectID="{A}"><one:Position x="300" y="300" z="1"/><one:Size width="10" height="10"/><one:Data>AAAA</one:Data></one:InkDrawing>
+</one:Page>
