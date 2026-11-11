@@ -161,5 +161,24 @@ namespace InkMath.Tests
             }
             Assert.True(p.WaitForExit(5000));
         }
+
+        [Fact]
+        public void Stop_and_dispose_never_wait_for_a_slow_start()
+        {
+            var settings = Stub("noready");
+            settings.ReadyTimeoutSeconds = 30;
+            var s = new SolverClient(settings);
+            var starting = Task.Run(() => s.Start());
+            Thread.Sleep(1500);                          // Start() is now waiting for "ready"
+            var sw = Stopwatch.StartNew();
+            s.Stop("r1");
+            s.Continue("r1");
+            Assert.True(sw.ElapsedMilliseconds < 200, "Stop/Continue took " + sw.ElapsedMilliseconds + " ms");
+            sw.Restart();
+            s.Dispose();
+            Assert.True(sw.ElapsedMilliseconds < 500, "Dispose took " + sw.ElapsedMilliseconds + " ms");
+            Assert.True(starting.Wait(10000), "Start did not give up after Dispose");
+            Assert.False(starting.Result);
+        }
     }
 }

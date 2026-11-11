@@ -40,11 +40,13 @@ namespace InkMath.AddIn
         readonly object startGate = new object();
         readonly object solveGate = new object();
         readonly object writeGate = new object();
-        Process proc;
-        StreamWriter stdin;
+        // volatile: Write and Dispose read these without startGate, so a slow Start() can never block
+        // a Stop/Continue/Dispose coming from OneNote's ribbon thread (spec §3: never hang OneNote).
+        volatile Process proc;
+        volatile StreamWriter stdin;
         BlockingCollection<string> lines;
         bool ready;
-        bool disposed;
+        volatile bool disposed;
 
         public SolverClient(SolverSettings settings) { this.settings = settings; }
 
@@ -161,11 +163,10 @@ namespace InkMath.AddIn
         {
             lock (writeGate)
             {
-                StreamWriter w;
-                lock (startGate) w = stdin;
+                var w = stdin;
                 if (w == null) return false;
                 try { w.WriteLine(line); return true; }
-                catch (Exception e) when (e is IOException || e is ObjectDisposedException)
+                catch (Exception e)       // includes races with a concurrent close
                 {
                     Log.Error("writing to solver", e);
                     return false;
@@ -201,19 +202,19 @@ namespace InkMath.AddIn
             try { p.WaitForExit(3000); p.Dispose(); } catch { /* best effort */ }
         }
 
+        /// <summary>Returns at once: closes stdin (the server exits on EOF) and kills it after 3 s if it hasn't.</summary>
         public void Dispose()
         {
-            lock (startGate)
+            if (disposed) return;
+            disposed = true;
+            var p = proc;
+            var w = stdin;
+            stdin = null;
+            ThreadPool.QueueUserWorkItem(_ =>
             {
-                if (disposed) return;
-                disposed = true;
-                ready = false;
-                var p = proc;
-                try { stdin?.Dispose(); } catch { /* ignore */ }     // EOF: the server exits on its own
-                stdin = null;
-                try { if (p != null && !p.WaitForExit(3000)) p.Kill(); } catch { /* ignore */ }
-                proc = null;
-            }
+                lock (writeGate) { try { w?.Dispose(); } catch { /* already gone */ } }
+                try { if (p != null && !p.WaitForExit(3000)) p.Kill(); } catch { /* raced with exit */ }
+            });
         }
     }
 }

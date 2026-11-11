@@ -1,9 +1,12 @@
-"""Test stand-in for `python -m inkmath_solver`: python stub_solver.py <answer|stderr|silent|crash>."""
+"""Test stand-in for `python -m inkmath_solver`: python stub_solver.py <answer|stderr|silent|crash|noready>."""
 import json
 import sys
+import time
 
 mode = sys.argv[1]
 sys.stdout.reconfigure(encoding="utf-8", newline="\n")
+if mode == "noready":
+    time.sleep(600)
 print('{"ready": true}', flush=True)
 for line in sys.stdin:
     req = json.loads(line)
