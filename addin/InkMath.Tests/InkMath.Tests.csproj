@@ -13,6 +13,7 @@
     <ProjectReference Include="..\InkMath.AddIn\InkMath.AddIn.csproj" />
     <Reference Include="Microsoft.CSharp" />
     <Reference Include="System.Xml.Linq" />
+    <Reference Include="System.Web.Extensions" />
   </ItemGroup>
   <ItemGroup>
     <None Include="fixtures\**" CopyToOutputDirectory="PreserveNewest" />
