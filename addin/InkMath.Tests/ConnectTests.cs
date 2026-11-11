@@ -13,6 +13,12 @@ namespace InkMath.Tests
         public string Id { get; }
     }
 
+    public class FakeRibbon
+    {
+        public readonly System.Threading.ManualResetEventSlim Invalidated = new System.Threading.ManualResetEventSlim();
+        public void Invalidate() => Invalidated.Set();
+    }
+
     class ThrowingController : ISolveController
     {
         static Exception E => new InvalidOperationException("boom");
@@ -112,6 +118,33 @@ namespace InkMath.Tests
             c.OnAddInsUpdate(ref custom);
             c.OnBeginShutdown(ref custom);
             c.OnDisconnection(ext_DisconnectMode.ext_dm_HostShutdown, ref custom);
+        }
+
+        [Fact]
+        public void Ribbon_refreshes_when_connected_on_a_non_pumping_mta_thread()
+        {
+            var ribbon = new FakeRibbon();
+            Connect c = null;
+            var t = new System.Threading.Thread(() =>
+            {
+                c = new Connect();
+                Array custom = new object[0];
+                c.OnConnection(null, ext_ConnectMode.ext_cm_Startup, null, ref custom);
+                c.OnRibbonLoad(ribbon);
+            });
+            t.SetApartmentState(System.Threading.ApartmentState.MTA);
+            t.Start();
+            t.Join();
+            try
+            {
+                c.Changed();
+                Assert.True(ribbon.Invalidated.Wait(3000), "ribbon.Invalidate was never called");
+            }
+            finally
+            {
+                Array custom = new object[0];
+                c.OnBeginShutdown(ref custom);
+            }
         }
     }
 }

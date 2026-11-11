@@ -39,9 +39,17 @@ namespace InkMath.AddIn
             try
             {
                 Log.Info($"OnConnection ({ConnectMode}), pid {System.Diagnostics.Process.GetCurrentProcess().Id}, {(Environment.Is64BitProcess ? 64 : 32)}-bit");
-                uiControl = new Control();
-                var unused = uiControl.Handle;                  // the marshaling window lives on this (ribbon) thread
-                ui = new WindowsFormsSynchronizationContext();
+                var apartment = Thread.CurrentThread.GetApartmentState();
+                Log.Info("ribbon thread apartment: " + apartment);
+                if (apartment == ApartmentState.STA)
+                {
+                    // An STA thread pumps messages, so ribbon refreshes are posted back to it.
+                    uiControl = new Control();
+                    var unused = uiControl.Handle;              // the marshaling window lives on this (ribbon) thread
+                    ui = new WindowsFormsSynchronizationContext();
+                }
+                // In the MTA (dllhost may host a "Both" object there) nothing pumps messages: the ribbon proxy
+                // is usable from any MTA thread, so Changed() calls Invalidate from the thread pool instead.
 
                 var settings = AddInSettings.Load(DllDir());
                 if (settings == null) Log.Info("no " + AddInSettings.FileName + " beside the add-in; the solver can't start");
@@ -212,16 +220,18 @@ namespace InkMath.AddIn
             }
         }
 
-        void Changed()
+        internal void Changed()
         {
             var ctx = ui;
             var r = ribbon;
-            if (ctx == null || r == null) return;
-            ctx.Post(_ =>
+            if (r == null) return;
+            SendOrPostCallback invalidate = _ =>
             {
                 try { ((dynamic)r).Invalidate(); }
                 catch (Exception e) { Log.Error("ribbon Invalidate", e); }
-            }, null);
+            };
+            if (ctx != null) ctx.Post(invalidate, null);
+            else ThreadPool.QueueUserWorkItem(o => invalidate(o));
         }
 
         void Shutdown()
