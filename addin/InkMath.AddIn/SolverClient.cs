@@ -64,7 +64,7 @@ namespace InkMath.AddIn
                 {
                     Launch();
                 }
-                catch (Exception e) when (e is Win32Exception || e is InvalidOperationException || e is IOException)
+                catch (Exception e)
                 {
                     Log.Error("solver failed to launch (" + settings.PythonExe + ")", e);
                     KillLocked();
