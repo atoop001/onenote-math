@@ -15,7 +15,7 @@ _GREEK = {"alpha", "beta", "gamma", "delta", "epsilon", "theta", "vartheta", "la
           "sigma", "tau", "phi", "varphi", "omega"}
 
 _TOKEN = re.compile(
-    r"(\\(?:operatorname|text|mathrm|mathit)\{[^}]*\})"          # 1: leave alone
+    r"(\\\\|\\(?:operatorname|text|mathrm|mathit)\{[^}]*\})"     # 1: leave alone (a \\ row break, or text)
     r"|\\([A-Za-z]+)"                                             # 2: a command (maybe glued)
     r"|(?<![A-Za-z])(" + "|".join(FUNCS) + r")(?=[A-Za-z0-9(])"   # 3: a bare function name
 )

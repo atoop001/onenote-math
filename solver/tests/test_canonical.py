@@ -18,6 +18,8 @@ PAIRS = [
     ("log100", r"\log 100"),
     (ARRAY, CASES),
     (r"\left\{\begin{array}{ll}x+y=3\\x-y=1\end{array}\right.", CASES),
+    (r"\begin{cases}x+y=1\\lnx=2\end{cases}", r"\begin{cases}x+y=1\\\ln x=2\end{cases}"),
+    (r"\begin{cases}y=1\\sinx=0\end{cases}", r"\begin{cases}y=1\\\sin x=0\end{cases}"),
 ]
 
 
