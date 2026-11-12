@@ -37,109 +37,36 @@ namespace InkMath.AddIn
         public const string CrashMessage = "Something went wrong solving this";
 
         readonly SolverSettings settings;
-        readonly object startGate = new object();
         readonly object solveGate = new object();
-        readonly object writeGate = new object();
-        // volatile: Write and Dispose read these without startGate, so a slow Start() can never block
-        // a Stop/Continue/Dispose coming from OneNote's ribbon thread (spec §3: never hang OneNote).
-        volatile Process proc;
-        volatile StreamWriter stdin;
-        BlockingCollection<string> lines;
-        bool ready;
-        volatile bool disposed;
+        readonly JsonLinesProcess process;
 
-        public SolverClient(SolverSettings settings) { this.settings = settings; }
-
-        internal int? ProcessId
+        public SolverClient(SolverSettings settings)
         {
-            get { lock (startGate) { try { return proc?.Id; } catch (InvalidOperationException) { return null; } } }
-        }
-
-        public bool Start()
-        {
-            lock (startGate)
-            {
-                if (disposed) return false;
-                if (ready && Alive(proc)) return true;
-                KillLocked();
-                try
-                {
-                    Launch();
-                }
-                catch (Exception e)
-                {
-                    Log.Error("solver failed to launch (" + settings.PythonExe + ")", e);
-                    KillLocked();
-                    return false;
-                }
-
-                var deadline = DateTime.UtcNow.AddSeconds(settings.ReadyTimeoutSeconds);
-                while (true)
-                {
-                    var left = deadline - DateTime.UtcNow;
-                    if (left <= TimeSpan.Zero || !lines.TryTake(out var line, left))
-                    {
-                        Log.Info("solver did not become ready");
-                        KillLocked();
-                        return false;
-                    }
-                    if (Protocol.IsReady(line)) { ready = true; Log.Info("solver ready, pid " + proc.Id); return true; }
-                    Log.Info("solver (before ready): " + line);
-                }
-            }
-        }
-
-        void Launch()
-        {
+            this.settings = settings;
             var args = settings.ExtraArgs
                        ?? "-m inkmath_solver --checkin " + settings.CheckinSeconds.ToString(CultureInfo.InvariantCulture);
-            var psi = new ProcessStartInfo(settings.PythonExe, args)
-            {
-                WorkingDirectory = settings.SolverDir,
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                RedirectStandardInput = true,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                StandardOutputEncoding = Encoding.UTF8,
-                StandardErrorEncoding = Encoding.UTF8,
-            };
-            psi.EnvironmentVariables["PYTHONUTF8"] = "1";
-            var p = Process.Start(psi) ?? throw new InvalidOperationException("Process.Start returned null");
-            var q = new BlockingCollection<string>();
-            proc = p;
-            lines = q;
-            stdin = new StreamWriter(p.StandardInput.BaseStream, new UTF8Encoding(false)) { AutoFlush = true, NewLine = "\n" };
-
-            var outReader = p.StandardOutput;
-            var errReader = p.StandardError;
-            new Thread(() =>
-            {
-                try { string l; while ((l = outReader.ReadLine()) != null) q.Add(l); }
-                catch (Exception e) { Log.Error("solver stdout reader", e); }
-                finally { q.CompleteAdding(); }
-            }) { IsBackground = true, Name = "InkMath solver stdout" }.Start();
-            new Thread(() =>
-            {
-                try { string l; while ((l = errReader.ReadLine()) != null) Log.Info("solver: " + l); }
-                catch (Exception e) { Log.Error("solver stderr reader", e); }
-            }) { IsBackground = true, Name = "InkMath solver stderr" }.Start();
+            process = new JsonLinesProcess(settings.PythonExe, args, settings.SolverDir, null,
+                                           settings.ReadyTimeoutSeconds, Protocol.IsReady, "solver");
         }
+
+        internal int? ProcessId => process.ProcessId;
+
+        public bool Start() => process.Start();
 
         public SolverResponse Solve(SolverRequest req, Action<SolverResponse> onCheckIn)
         {
             lock (solveGate)
             {
                 if (!Start()) return Error(req.Id, NotRunning);
-                BlockingCollection<string> q;
-                lock (startGate) q = lines;
-                if (!Write(Protocol.ToJson(req))) return Crashed(req.Id, "could not write request");
+                var q = process.Lines;
+                if (!process.Write(Protocol.ToJson(req))) return Crashed(req.Id, "could not write request");
 
                 var dead = TimeSpan.FromSeconds(settings.DeadAfterSeconds);
                 while (true)
                 {
-                    if (!q.TryTake(out var line, dead))
-                        return Crashed(req.Id, q.IsCompleted ? "solver process ended" : "no line for " + dead.TotalSeconds + " s");
+                    var line = JsonLinesProcess.ReadLine(q, dead, out var ended);
+                    if (line == null)
+                        return Crashed(req.Id, ended ? "solver process ended" : "no line for " + dead.TotalSeconds + " s");
                     SolverResponse r;
                     try { r = Protocol.Parse(line); }
                     catch (FormatException) { Log.Info("solver sent non-JSON: " + line); continue; }
@@ -155,66 +82,21 @@ namespace InkMath.AddIn
             }
         }
 
-        public void Continue(string id) => Write(Protocol.Control(id, "continue"));
+        public void Continue(string id) => process.Write(Protocol.Control(id, "continue"));
 
-        public void Stop(string id) => Write(Protocol.Control(id, "stop"));
-
-        bool Write(string line)
-        {
-            lock (writeGate)
-            {
-                var w = stdin;
-                if (w == null) return false;
-                try { w.WriteLine(line); return true; }
-                catch (Exception e)       // includes races with a concurrent close
-                {
-                    Log.Error("writing to solver", e);
-                    return false;
-                }
-            }
-        }
+        public void Stop(string id) => process.Write(Protocol.Control(id, "stop"));
 
         SolverResponse Crashed(string id, string why)
         {
             Log.Info("solver restart: " + why);
-            lock (startGate) KillLocked();
+            process.Kill();
             ThreadPool.QueueUserWorkItem(_ => Start());     // warm again for the next solve
             return Error(id, CrashMessage);
         }
 
         static SolverResponse Error(string id, string message) => new SolverResponse { Id = id, Status = "error", Message = message };
 
-        static bool Alive(Process p)
-        {
-            try { return p != null && !p.HasExited; }
-            catch (InvalidOperationException) { return false; }
-        }
-
-        void KillLocked()
-        {
-            ready = false;
-            var p = proc;
-            proc = null;
-            try { stdin?.Dispose(); } catch { /* already gone */ }
-            stdin = null;
-            if (p == null) return;
-            try { if (!p.HasExited) p.Kill(); } catch { /* raced with exit */ }
-            try { p.WaitForExit(3000); p.Dispose(); } catch { /* best effort */ }
-        }
-
         /// <summary>Returns at once: closes stdin (the server exits on EOF) and kills it after 3 s if it hasn't.</summary>
-        public void Dispose()
-        {
-            if (disposed) return;
-            disposed = true;
-            var p = proc;
-            var w = stdin;
-            stdin = null;
-            ThreadPool.QueueUserWorkItem(_ =>
-            {
-                lock (writeGate) { try { w?.Dispose(); } catch { /* already gone */ } }
-                try { if (p != null && !p.WaitForExit(3000)) p.Kill(); } catch { /* raced with exit */ }
-            });
-        }
+        public void Dispose() => process.Dispose();
     }
 }
