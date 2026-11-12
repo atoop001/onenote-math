@@ -49,6 +49,16 @@ def test_multi_unit_alternatives_are_dropped():
     assert build_symbols(r, 0.85)[0].alternatives == ["6", "s"]
 
 
+def test_syntax_pieces_are_not_offered_for_a_symbol():
+    r = reading("x", [("x", 0.5, [("\\", 0.2), ("_", 0.1), ("{", 0.05), ("X", 0.04)])])
+    assert build_symbols(r, 0.85)[0].alternatives == ["X", "\\times"]
+
+
+def test_syntax_pieces_may_replace_each_other():
+    r = reading("x^2", [("x", 0.99, []), ("^", 0.5, [("_", 0.3)]), ("2", 0.99, [])])
+    assert build_symbols(r, 0.85)[1].alternatives == ["_"]
+
+
 def test_alternatives_rebuild_inside_a_command():
     r = reading(r"\leq", [("\\le", 0.5, [("\\ge", 0.3)]), ("q", 0.99, [])])
     assert build_symbols(r, 0.85)[0].alternatives[0] == "\\geq"

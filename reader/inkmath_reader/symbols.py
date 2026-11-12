@@ -36,9 +36,17 @@ def split_symbols(latex: str) -> list[tuple[str, int, int]]:
     return [(m.group(), m.start(), m.end()) for m in _UNIT.finditer(latex)]
 
 
+# LaTeX syntax, not math a tutor would pick: offered only in place of another syntax piece.
+_SYNTAX = {"\\", "{", "}", "^", "_", "&"}
+
+
 def _is_unit(s: str) -> bool:
     units = split_symbols(s)
     return len(units) == 1 and units[0][0] == s
+
+
+def _fits(alt: str, text: str) -> bool:
+    return alt != text and _is_unit(alt) and (alt in _SYNTAX) == (text in _SYNTAX)
 
 
 def _raw_symbols(reading: RawReading):
@@ -56,7 +64,7 @@ def _raw_symbols(reading: RawReading):
             ts, te, st = over[0]
             for alt, _ in st.alts:
                 cand = reading.raw[s:max(s, ts)] + alt.strip() + reading.raw[min(te, e):e]
-                if cand != text and _is_unit(cand) and cand not in alts:
+                if _fits(cand, text) and cand not in alts:
                     alts.append(cand)
         out.append((text, s, e, conf, alts))
     return out
