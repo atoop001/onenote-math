@@ -99,6 +99,56 @@ namespace InkMath.Tests
             }
         }
 
+        const string TypeLib = "{0EA692EE-BB50-4E3C-AEF0-356D91732725}";
+        const string OneNoteExe = @"C:\Office\ONENOTE.EXE\3";
+
+        // A fake machine registration like the dev PC's: version 1.0 holds only a PIA name, 1.1 has the file.
+        void FakeTypeLibSource(bool broken)
+        {
+            using (var root = RegistryKey.OpenBaseKey(RegistryHive.CurrentUser, RegistryView.Default))
+            {
+                if (broken)
+                    using (var k = root.CreateSubKey($@"{prefix}\Src\TypeLib\{TypeLib}\1.0"))
+                        k.SetValue("PrimaryInteropAssemblyName", "Microsoft.Office.Interop.OneNote");
+                using (var k = root.CreateSubKey($@"{prefix}\Src\TypeLib\{TypeLib}\1.1\0\win32"))
+                    k.SetValue("", OneNoteExe);
+            }
+        }
+
+        string RepairArgs => $"-DllPath \"{dll}\" -KeyPrefix \"{prefix}\" -TypeLibSourceHive CurrentUser -TypeLibSourceKey \"{prefix}\\Src\\TypeLib\"";
+
+        [Fact]
+        public void Register_repairs_a_half_registered_onenote_type_library()
+        {
+            FakeTypeLibSource(broken: true);
+            Run("register.ps1", RepairArgs);
+            Assert.Equal(OneNoteExe, Value(RegistryView.Default, $@"{prefix}\Classes\TypeLib\{TypeLib}\1.0\0\win32", ""));
+            Assert.Null(Value(RegistryView.Default, $@"{prefix}\Classes\TypeLib\{TypeLib}\1.1\0\win32", ""));
+
+            Run("unregister.ps1", $"-KeyPrefix \"{prefix}\"");
+            using (var root = RegistryKey.OpenBaseKey(RegistryHive.CurrentUser, RegistryView.Default))
+                Assert.Null(root.OpenSubKey($@"{prefix}\Classes\TypeLib\{TypeLib}\1.0"));
+        }
+
+        [Fact]
+        public void Register_leaves_a_healthy_type_library_alone()
+        {
+            FakeTypeLibSource(broken: false);
+            Run("register.ps1", RepairArgs);
+            using (var root = RegistryKey.OpenBaseKey(RegistryHive.CurrentUser, RegistryView.Default))
+                Assert.Null(root.OpenSubKey($@"{prefix}\Classes\TypeLib\{TypeLib}"));
+        }
+
+        [Fact]
+        public void Unregister_keeps_type_library_entries_it_did_not_write()
+        {
+            using (var root = RegistryKey.OpenBaseKey(RegistryHive.CurrentUser, RegistryView.Default))
+            using (var k = root.CreateSubKey($@"{prefix}\Classes\TypeLib\{TypeLib}\1.0\0\win32"))
+                k.SetValue("", OneNoteExe);
+            Run("unregister.ps1", $"-KeyPrefix \"{prefix}\"");
+            Assert.Equal(OneNoteExe, Value(RegistryView.Default, $@"{prefix}\Classes\TypeLib\{TypeLib}\1.0\0\win32", ""));
+        }
+
         public void Dispose()
         {
             foreach (var v in Views)

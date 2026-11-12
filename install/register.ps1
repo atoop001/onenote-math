@@ -8,7 +8,10 @@ param(
     [Parameter(Mandatory = $true)][string]$DllPath,
     [string]$PythonExe,
     [string]$SolverDir,
-    [string]$KeyPrefix = 'Software'
+    [string]$KeyPrefix = 'Software',
+    # Where Office registered the OneNote type library (overridable for tests).
+    [string]$TypeLibSourceHive = 'LocalMachine',
+    [string]$TypeLibSourceKey = 'SOFTWARE\Classes\TypeLib'
 )
 $ErrorActionPreference = 'Stop'
 
@@ -58,6 +61,37 @@ try {
         'Description' = 'Solve handwritten math'
     }
 } finally { $root.Close() }
+
+# Office sometimes leaves a OneNote type library version with no file (e.g. "1.0" holding only a PIA name).
+# OneNote then fails every late-bound call with "Library not registered". Point each such version at the
+# registered file, per user, and mark the entry so unregister.ps1 removes only what this script wrote.
+$TypeLib = '{0EA692EE-BB50-4E3C-AEF0-356D91732725}'
+$broken = @(); $file = $null; $platform = $null
+foreach ($view in [Microsoft.Win32.RegistryView]::Registry32, [Microsoft.Win32.RegistryView]::Registry64) {
+    $src = [Microsoft.Win32.RegistryKey]::OpenBaseKey([Microsoft.Win32.RegistryHive]$TypeLibSourceHive, $view)
+    try {
+        $lib = $src.OpenSubKey("$TypeLibSourceKey\$TypeLib")
+        if (-not $lib) { continue }
+        foreach ($ver in $lib.GetSubKeyNames()) {
+            $found = $false
+            foreach ($p in 'win32', 'win64') {
+                $k = $lib.OpenSubKey("$ver\0\$p")
+                if ($k -and $k.GetValue('')) { $found = $true; if (-not $file) { $file = $k.GetValue(''); $platform = $p } }
+            }
+            if (-not $found -and $broken -notcontains $ver) { $broken += $ver }
+        }
+    } finally { $src.Close() }
+}
+if ($file -and $broken.Count) {
+    $root = [Microsoft.Win32.RegistryKey]::OpenBaseKey([Microsoft.Win32.RegistryHive]::CurrentUser, [Microsoft.Win32.RegistryView]::Default)
+    try {
+        foreach ($ver in $broken) {
+            Set-Values $root "$KeyPrefix\Classes\TypeLib\$TypeLib\$ver" @{ 'InkMathRepair' = 1 }
+            Set-Values $root "$KeyPrefix\Classes\TypeLib\$TypeLib\$ver\0\$platform" @{ '' = $file }
+            Write-Output "Repaired OneNote type library version $ver -> $file"
+        }
+    } finally { $root.Close() }
+}
 
 if ($PythonExe) {
     $settings = [ordered]@{
