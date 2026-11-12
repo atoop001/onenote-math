@@ -1,7 +1,7 @@
 {
   "version": 1,
   "project": "OneNote Ink Math",
-  "updated": "2026-11-11",
+  "updated": "2026-11-12",
   "milestones": [
     {
       "id": "M0",
@@ -127,7 +127,7 @@
         },
         {
           "title": "User runs the dev check in OneNote",
-          "done": false
+          "done": true
         }
       ]
     },
