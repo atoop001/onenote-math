@@ -90,8 +90,18 @@ def test_identity_false():
     assert r.value is False and "Not an identity" in r.steps[-1]
 
 
-def test_steps_linear():
-    assert run("3x-7=11", run_solve).steps[0] == "Collect x terms: 3x = 18"
+@pytest.mark.parametrize("latex, steps", [
+    ("3x-7=11", ["Add 7 to both sides: 3x = 18", "Divide both sides by 3"]),
+    ("3x+7=11", ["Subtract 7 from both sides: 3x = 4", "Divide both sides by 3"]),
+    ("x+5=2", ["Subtract 5 from both sides: x = −3"]),
+    ("11=3x-7", ["Add 7 to both sides: 18 = 3x", "Divide both sides by 3"]),
+    (r"\frac{x}{2}+3=5", ["Subtract 3 from both sides: x/2 = 2", "Multiply both sides by 2"]),
+    ("4x=12", ["Divide both sides by 4"]),
+    ("-x+2=5", ["Subtract 2 from both sides: −x = 3", "Divide both sides by −1"]),
+    ("5x+1=2x+7", ["Collect x terms: 3x = 6", "Divide both sides by 3"]),
+])
+def test_steps_linear(latex, steps):
+    assert run(latex, run_solve).steps == steps
 
 
 def test_steps_count():

@@ -1,0 +1,18 @@
+<customUI xmlns="http://schemas.microsoft.com/office/2009/07/customui" onLoad="OnRibbonLoad">
+  <ribbon>
+    <tabs>
+      <tab id="inkMathTab" label="Math">
+        <group id="solveGroup" label="Solve">
+          <button id="solveButton" label="Solve" size="large" onAction="OnSolve" getEnabled="GetEnabled" />
+          <toggleButton id="showStepsToggle" label="Show steps" getPressed="GetPressed" onAction="OnToggleSteps" />
+          <button id="keepGoingButton" label="Keep going" onAction="OnKeepGoing" getEnabled="GetEnabled" />
+          <button id="stopButton" label="Stop" onAction="OnStop" getEnabled="GetEnabled" />
+        </group>
+        <group id="statusGroup" label="Status">
+          <labelControl id="badgeLabel" getLabel="GetLabel" />
+          <labelControl id="statusLabel" getLabel="GetLabel" />
+        </group>
+      </tab>
+    </tabs>
+  </ribbon>
+</customUI>

@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>InkMath.AddIn</RootNamespace>
+    <AssemblyName>InkMath.AddIn</AssemblyName>
+    <AssemblyVersion>1.0.0.0</AssemblyVersion>
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="Microsoft.CSharp" />
+    <Reference Include="System.Web.Extensions" />
+    <Reference Include="System.Windows.Forms" />
+    <Reference Include="System.Xml.Linq" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Ribbon.xml" LogicalName="InkMath.AddIn.Ribbon.xml" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="InkMath.Tests" />
+  </ItemGroup>
+</Project>

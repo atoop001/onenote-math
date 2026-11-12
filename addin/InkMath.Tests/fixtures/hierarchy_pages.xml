@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<one:Notebooks xmlns:one="http://schemas.microsoft.com/office/onenote/2013/onenote">
+  <one:Notebook name="nb1" ID="{NB-1}" isCurrentlyViewed="true">
+    <one:Section name="s1" ID="{SEC-1}" isCurrentlyViewed="true">
+      <one:Page ID="{PAGE-1}" name="p1"/>
+      <one:Page ID="{PAGE-2}" name="p2" isCurrentlyViewed="true"/>
+    </one:Section>
+    <one:SectionGroup name="g" ID="{SG-1}">
+      <one:Section name="s2" ID="{SEC-2}">
+        <one:Page ID="{PAGE-3}" name="p3"/>
+      </one:Section>
+    </one:SectionGroup>
+  </one:Notebook>
+  <one:Notebook name="nb2" ID="{NB-2}">
+    <one:Section name="s3" ID="{SEC-3}"><one:Page ID="{PAGE-5}" name="p5"/></one:Section>
+  </one:Notebook>
+</one:Notebooks>

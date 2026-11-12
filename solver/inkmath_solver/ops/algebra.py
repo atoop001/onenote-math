@@ -140,6 +140,31 @@ def _log_name(b) -> str:
     return "ln" if b == S.Exp1 else "log" + t(b).translate(_SUB)
 
 
+def _linear_steps(lhs, rhs, var):
+    """Tutor-style steps for a linear equation: move the constant ("Add 7 to both sides: 3x = 18"),
+    then divide (or multiply by the reciprocal of a fraction). x on both sides: "Collect x terms" first."""
+    v = t(var)
+    l, r = expand(lhs), expand(rhs)
+    one_sided = l.is_polynomial(var) and r.is_polynomial(var) and (l.has(var) != r.has(var))
+    if not one_sided:
+        a, b = Poly(l - r, var).all_coeffs()
+        steps = [f"Collect {v} terms: {t(a * var)} = {t(-b)}"]
+    else:
+        swapped = r.has(var)
+        side, other = (r, l) if swapped else (l, r)
+        a, c = Poly(side, var).all_coeffs()
+        steps = []
+        if c != 0:
+            moved = other - c
+            verb = f"Add {t(-c)} to" if c.could_extract_minus_sign() else f"Subtract {t(c)} from"
+            left, right = (moved, a * var) if swapped else (a * var, moved)
+            steps.append(f"{verb} both sides: {t(left)} = {t(right)}")
+    if a != 1:
+        steps.append(f"Multiply both sides by {t(1 / a)}" if a.is_Rational and not a.is_Integer
+                     else f"Divide both sides by {t(a)}")
+    return steps
+
+
 def _equation_steps(eq, f, var):
     """(steps, candidate roots before checking)."""
     v = t(var)
@@ -148,9 +173,7 @@ def _equation_steps(eq, f, var):
         poly = Poly(f, var)
         deg = poly.degree()
         if deg == 1:
-            a, b = poly.all_coeffs()
-            steps = [f"Collect {v} terms: {t(a * var)} = {t(-b)}"]
-            return steps + ([f"Divide by {t(a)}"] if a != 1 else []), []
+            return _linear_steps(lhs, rhs, var), []
         facs = [g for g, _ in factor_list(f)[1]]
         if len(facs) > 1 or (facs and Poly(facs[0], var).degree() < deg) or \
                 (len(facs) == 1 and factor_list(f)[1][0][1] > 1):
