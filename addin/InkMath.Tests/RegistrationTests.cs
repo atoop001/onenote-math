@@ -77,6 +77,17 @@ namespace InkMath.Tests
         }
 
         [Fact]
+        public void Register_writes_reader_settings()
+        {
+            Run("register.ps1", RegisterArgs + " -ReaderPythonExe \"C:\\rp\\python.exe\" -ReaderDir \"D:\\r\" -ModelsDir \"D:\\m\"");
+            var settings = InkMath.AddIn.AddInSettings.Load(dir);
+            Assert.Equal(@"C:\rp\python.exe", settings.ReaderPythonExe);
+            Assert.Equal(@"D:\r", settings.ReaderDir);
+            Assert.Equal(@"D:\m", settings.ModelsDir);
+            Assert.Equal(@"C:\py\python.exe", settings.PythonExe);
+        }
+
+        [Fact]
         public void Register_without_python_writes_no_settings()
         {
             Run("register.ps1", $"-DllPath \"{dll}\" -KeyPrefix \"{prefix}\"");

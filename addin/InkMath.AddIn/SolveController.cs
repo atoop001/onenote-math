@@ -1,5 +1,6 @@
 using System;
 using System.Diagnostics;
+using System.Globalization;
 using System.Linq;
 using System.Threading;
 
@@ -28,7 +29,9 @@ namespace InkMath.AddIn
     public static class StatusText
     {
         public const string NothingSelected = "Lasso a problem first.";
-        public const string InkSaved = "Ink saved. Handwriting reading isn't installed yet. Lasso typed text to test.";
+        public const string ReaderNotSetUp = "Handwriting reading isn't set up. Check the setup.";
+        /// <summary>Until M5's confirm panel: show what was read; nothing is solved (spec §6.2).</summary>
+        public const int MaxLatexInStatus = 60;
         public const string Solving = "Solving…";
         public const string WriteFailed = "Couldn't write the answer onto the page.";
         public const string Unexpected = "Something went wrong. Details are in the log.";
@@ -40,17 +43,20 @@ namespace InkMath.AddIn
     {
         readonly IOneNotePage page;
         readonly ISolver solver;
+        readonly IReader reader;
         readonly ISelectionStore store;
         readonly Action changed;
-        int counter;
+        int counter, inkCounter;
         volatile string status = "";
         volatile bool busy, awaiting, showSteps = true;
         volatile string currentId;
 
-        public SolveController(IOneNotePage page, ISolver solver, ISelectionStore store, Action changed)
+        /// <param name="reader">Null when handwriting reading isn't configured.</param>
+        public SolveController(IOneNotePage page, ISolver solver, IReader reader, ISelectionStore store, Action changed)
         {
             this.page = page;
             this.solver = solver;
+            this.reader = reader;
             this.store = store;
             this.changed = changed ?? (() => { });
         }
@@ -74,8 +80,7 @@ namespace InkMath.AddIn
                 if (sel.Ink.Count > 0)
                 {
                     store.SaveLast(sel);
-                    Log.Info($"ink saved: {sel.Ink.Count} items, read {read} ms");
-                    Set(StatusText.InkSaved);
+                    ReadInk(sel, sw);
                     return;
                 }
 
@@ -109,6 +114,19 @@ namespace InkMath.AddIn
                 busy = false;
                 Notify();
             }
+        }
+
+        void ReadInk(InkSelection sel, Stopwatch sw)
+        {
+            if (reader == null) { Set(StatusText.ReaderNotSetUp); return; }
+            var id = "k" + Interlocked.Increment(ref inkCounter);
+            var r = reader.Read(id, sel.Ink.Select(i => i.Isf).ToList());
+            if (r.Status != "ok") { Set(r.Message); Log.Info($"read {id}: {r.Status}"); return; }
+            var low = r.Symbols.Count(s => s.Low);
+            var latex = r.Latex.Length > StatusText.MaxLatexInStatus ? r.Latex.Substring(0, StatusText.MaxLatexInStatus) + "…" : r.Latex;
+            var secs = (sw.ElapsedMilliseconds / 1000.0).ToString("0.0", CultureInfo.InvariantCulture);
+            Set($"Read: {latex} · {secs} s" + (low > 0 ? $" · {low} to check" : ""));
+            Log.Info($"read {id}: {r.Latex} · {low} low · {sw.ElapsedMilliseconds} ms (reader {r.TotalMs} ms) · {r.Model}");
         }
 
         void OnCheckIn(SolverResponse r)

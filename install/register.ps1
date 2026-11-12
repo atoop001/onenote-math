@@ -8,6 +8,10 @@ param(
     [Parameter(Mandatory = $true)][string]$DllPath,
     [string]$PythonExe,
     [string]$SolverDir,
+    # Handwriting reader (M4): its venv's python.exe, the reader folder, and the model files folder.
+    [string]$ReaderPythonExe,
+    [string]$ReaderDir,
+    [string]$ModelsDir,
     [string]$KeyPrefix = 'Software',
     # Where Office registered the OneNote type library (overridable for tests).
     [string]$TypeLibSourceHive = 'LocalMachine',
@@ -100,6 +104,12 @@ if ($PythonExe) {
     }
     if (-not $settings.pythonExe) { $settings.pythonExe = $PythonExe }
     if ($SolverDir -and -not $settings.solverDir) { $settings.solverDir = $SolverDir }
+    foreach ($pair in @(@('readerPythonExe', $ReaderPythonExe), @('readerDir', $ReaderDir), @('modelsDir', $ModelsDir))) {
+        if ($pair[1]) {
+            $full = (Resolve-Path -LiteralPath $pair[1] -ErrorAction SilentlyContinue).ProviderPath
+            $settings[$pair[0]] = if ($full) { $full } else { $pair[1] }
+        }
+    }
     $json = $settings | ConvertTo-Json
     $out = Join-Path (Split-Path -Parent $dll) 'inkmath.settings.json'
     [IO.File]::WriteAllText($out, $json, (New-Object Text.UTF8Encoding $false))

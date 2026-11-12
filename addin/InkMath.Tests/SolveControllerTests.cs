@@ -44,13 +44,107 @@ namespace InkMath.Tests
         public void SaveLast(InkSelection s) => Saved.Add(s);
     }
 
+    class FakeReader : IReader
+    {
+        public ReaderResult Reply = new ReaderResult { Status = "ok", Latex = "3x-7=11", TotalMs = 1400, Model = "texteller" };
+        public readonly List<(string Id, int Items)> Reads = new List<(string, int)>();
+        public int StartBlockMs;
+        public bool Started;
+        public bool Ready => true;
+        public void StartInBackground() { Started = true; if (StartBlockMs > 0) System.Threading.Thread.Sleep(StartBlockMs); }
+        public ReaderResult Read(string id, IList<byte[]> isf) { Reads.Add((id, isf.Count)); return Reply; }
+        public void Dispose() { }
+    }
+
     public class SolveControllerTests
     {
         readonly FakePage page = new FakePage { Xml = Fixture("selection_typed.xml") };
         readonly FakeSolver solver = new FakeSolver { Reply = OkReply() };
         readonly FakeStore store = new FakeStore();
+        readonly FakeReader reader = new FakeReader();
         int changes;
-        SolveController C() => new SolveController(page, solver, store, () => changes++);
+        SolveController C() => new SolveController(page, solver, reader, store, () => changes++);
+
+        static ReaderSymbol Sym(string t, bool low) => new ReaderSymbol { Text = t, Low = low };
+
+        [Fact]
+        public void Ink_read_ok_shows_latex_and_time()
+        {
+            page.Xml = Fixture("selection_ink.xml");
+            var c = C();
+            c.Solve();
+            Assert.Equal(("k1", 2), reader.Reads.Single());
+            Assert.Single(store.Saved);
+            Assert.Matches(@"^Read: 3x-7=11 · \d+\.\d s$", c.Status);
+            Assert.Empty(solver.Requests);
+            Assert.False(c.Busy);
+        }
+
+        [Fact]
+        public void Ink_read_counts_low_symbols()
+        {
+            page.Xml = Fixture("selection_ink.xml");
+            reader.Reply.Symbols = new List<ReaderSymbol> { Sym("3", false), Sym("x", true), Sym("7", true) };
+            var c = C();
+            c.Solve();
+            Assert.Matches(@"^Read: 3x-7=11 · \d+\.\d s · 2 to check$", c.Status);
+        }
+
+        [Fact]
+        public void Long_latex_is_cut_at_60()
+        {
+            page.Xml = Fixture("selection_ink.xml");
+            reader.Reply.Latex = new string('x', 80);
+            var c = C();
+            c.Solve();
+            Assert.StartsWith("Read: " + new string('x', 60) + "… · ", c.Status);
+        }
+
+        [Fact]
+        public void Ink_solve_while_reader_starting_returns_at_once()
+        {
+            page.Xml = Fixture("selection_ink.xml");
+            reader.Reply = new ReaderResult { Status = "starting", Message = ReaderClient.Starting };
+            var c = C();
+            c.Solve();
+            Assert.Equal(ReaderClient.Starting, c.Status);
+            page.Xml = Fixture("selection_typed.xml");
+            c.Solve();
+            Assert.Equal("Solved offline · verified", c.Status);
+        }
+
+        [Fact]
+        public void Reader_messages_pass_through()
+        {
+            page.Xml = Fixture("selection_ink.xml");
+            reader.Reply = new ReaderResult { Status = "empty", Message = "Couldn't read any math in this ink." };
+            var c = C();
+            c.Solve();
+            Assert.Equal("Couldn't read any math in this ink.", c.Status);
+        }
+
+        [Fact]
+        public void Reader_not_configured_message()
+        {
+            page.Xml = Fixture("selection_ink.xml");
+            var c = new SolveController(page, solver, null, store, null);
+            c.Solve();
+            Assert.Equal("Handwriting reading isn't set up. Check the setup.", c.Status);
+            Assert.Single(store.Saved);
+        }
+
+        [Fact]
+        public void Ink_never_writes_to_the_page()
+        {
+            page.Xml = Fixture("selection_ink.xml");
+            foreach (var status in new[] { "ok", "error", "starting", "empty", "no_ink" })
+            {
+                reader.Reply = new ReaderResult { Status = status, Latex = "x", Message = "m" };
+                C().Solve();
+            }
+            Assert.Empty(page.Updates);
+            Assert.Empty(solver.Requests);
+        }
 
         static SolverResponse OkReply() => new SolverResponse
         {
@@ -103,7 +197,6 @@ namespace InkMath.Tests
             Assert.Equal(2, store.Saved[0].Ink.Count);
             Assert.Empty(solver.Requests);
             Assert.Empty(page.Updates);
-            Assert.Equal("Ink saved. Handwriting reading isn't installed yet. Lasso typed text to test.", c.Status);
         }
 
         [Fact]

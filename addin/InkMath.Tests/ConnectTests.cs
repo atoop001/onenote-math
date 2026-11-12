@@ -93,7 +93,7 @@ namespace InkMath.Tests
         public void Toggle_and_status_flow_through_to_controller()
         {
             var page = new FakePage { Xml = TestFiles.Fixture("selection_caret.xml") };
-            var ctl = new SolveController(page, new FakeSolver(), new FakeStore(), null);
+            var ctl = new SolveController(page, new FakeSolver(), new FakeReader(), new FakeStore(), null);
             var c = new Connect(ctl);
             c.OnToggleSteps(Ctl("showStepsToggle"), false);
             Assert.False(ctl.ShowSteps);
@@ -152,6 +152,32 @@ namespace InkMath.Tests
             {
                 c.Changed();
                 Assert.True(ribbon.Invalidated.Wait(3000), "ribbon.Invalidate was never called");
+            }
+            finally
+            {
+                Array custom = new object[0];
+                c.OnBeginShutdown(ref custom);
+            }
+        }
+
+        [Fact]
+        public void Reader_start_does_not_block_the_worker()
+        {
+            var ctl = new BlockingController();
+            var reader = new FakeReader { StartBlockMs = 5000 };
+            var c = new Connect(ctl, startWorker: true, reader: reader);
+            try
+            {
+                var startup = new System.Threading.Thread(() => { Array custom = new object[0]; c.OnStartupComplete(ref custom); });
+                startup.Start();
+                var deadline = DateTime.UtcNow.AddSeconds(2);
+                while (!reader.Started && DateTime.UtcNow < deadline) System.Threading.Thread.Sleep(10);
+                Assert.True(reader.Started, "reader start was never requested");
+                ctl.Release.Set();
+                c.OnSolve(Ctl("solveButton"));
+                deadline = DateTime.UtcNow.AddSeconds(1);
+                while (ctl.Solves < 1 && DateTime.UtcNow < deadline) System.Threading.Thread.Sleep(10);
+                Assert.Equal(1, ctl.Solves);
             }
             finally
             {

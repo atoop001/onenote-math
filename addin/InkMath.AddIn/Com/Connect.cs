@@ -21,6 +21,7 @@ namespace InkMath.AddIn
         const string Offline = "Offline";
         ISolveController controller;
         SolverClient solver;
+        IReader reader;
         BlockingCollection<Action> queue;
         Thread worker;
         SynchronizationContext ui;
@@ -31,9 +32,10 @@ namespace InkMath.AddIn
 
         public Connect() { }
 
-        internal Connect(ISolveController controller, bool startWorker = false)
+        internal Connect(ISolveController controller, bool startWorker = false, IReader reader = null)
         {
             this.controller = controller;
+            this.reader = reader;
             if (startWorker) StartWorker();
         }
 
@@ -59,10 +61,16 @@ namespace InkMath.AddIn
                 var settings = AddInSettings.Load(DllDir());
                 if (settings == null) Log.Info("no " + AddInSettings.FileName + " beside the add-in; the solver can't start");
                 solver = new SolverClient(new SolverSettings { PythonExe = settings?.PythonExe, SolverDir = settings?.SolverDir });
+                if (!string.IsNullOrEmpty(settings?.ReaderPythonExe))
+                    reader = new ReaderClient(new ReaderSettings
+                    {
+                        PythonExe = settings.ReaderPythonExe, ReaderDir = settings.ReaderDir, ModelsDir = settings.ModelsDir,
+                    });
+                else Log.Info("no reader settings; handwriting reading is off");
 
                 StartWorker();
 
-                var c = new SolveController(new LazyPage(), solver, new SelectionStore(), Changed) { ShowSteps = pendingShowSteps };
+                var c = new SolveController(new LazyPage(), solver, reader, new SelectionStore(), Changed) { ShowSteps = pendingShowSteps };
                 controller = c;
             }
             catch (Exception e)
@@ -83,6 +91,9 @@ namespace InkMath.AddIn
         {
             try
             {
+                // The reader's cold load (~36 s) runs on its own thread, never on the worker queue, so a
+                // typed-text Solve right after OneNote opens isn't stuck behind it (spec §3).
+                reader?.StartInBackground();
                 var s = solver;
                 if (s != null) Enqueue(() => Log.Info(s.Start() ? "solver started" : "solver failed to start"));
             }
@@ -258,6 +269,8 @@ namespace InkMath.AddIn
             queue?.CompleteAdding();
             solver?.Dispose();
             solver = null;
+            try { reader?.Dispose(); } catch (Exception e) { Log.Error("reader dispose", e); }
+            reader = null;
             try { uiControl?.Dispose(); } catch { /* ignore */ }
             uiControl = null;
         }

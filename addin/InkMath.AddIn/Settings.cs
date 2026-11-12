@@ -12,6 +12,9 @@ namespace InkMath.AddIn
         public const string FileName = "inkmath.settings.json";
         public string PythonExe { get; set; }
         public string SolverDir { get; set; }
+        public string ReaderPythonExe { get; set; }
+        public string ReaderDir { get; set; }
+        public string ModelsDir { get; set; }
 
         /// <summary>Null when the file is missing or unreadable.</summary>
         public static AddInSettings Load(string dllDir)
@@ -25,6 +28,9 @@ namespace InkMath.AddIn
                 {
                     PythonExe = d.TryGetValue("pythonExe", out var p) ? p as string : null,
                     SolverDir = d.TryGetValue("solverDir", out var s) ? s as string : null,
+                    ReaderPythonExe = d.TryGetValue("readerPythonExe", out var rp) ? rp as string : null,
+                    ReaderDir = d.TryGetValue("readerDir", out var rd) ? rd as string : null,
+                    ModelsDir = d.TryGetValue("modelsDir", out var md) ? md as string : null,
                 };
             }
             catch (Exception e)
