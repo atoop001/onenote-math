@@ -135,10 +135,14 @@
       "id": "M4",
       "title": "Recognizer service",
       "steps": [
-        {
-          "title": "Recognizer service",
-          "done": false
-        }
+        { "title": "Ink to image", "done": false },
+        { "title": "Recognizer with confidences", "done": false },
+        { "title": "Symbols and alternatives", "done": false },
+        { "title": "Reader service and corrections store", "done": false },
+        { "title": "Solver reads reader quirks", "done": false },
+        { "title": "Personal tuning and gate", "done": false },
+        { "title": "Add-in reads lassoed ink", "done": false },
+        { "title": "User runs the M4 dev check", "done": false }
       ]
     },
     {
