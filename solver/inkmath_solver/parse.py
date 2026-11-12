@@ -6,6 +6,7 @@ from sympy import E, Derivative, Eq, I, Integral, Limit, Sum, Symbol, Tuple, nsi
 from sympy.core.function import AppliedUndef
 from sympy.core.relational import Relational
 
+from .canonical import canonicalize
 from .problem import Problem
 
 _FUNCS = "arcsin|arccos|arctan|sinh|cosh|tanh|sin|cos|tan|sec|csc|cot|log|ln|exp"
@@ -36,6 +37,7 @@ class ParseError(Exception):
 
 
 def clean_latex(s: str) -> str:
+    s = canonicalize(s)                 # reader quirks first (lnx, \sinx, array systems)
     for pat, rep in _REWRITES:
         s = pat.sub(rep, s)
     return s.strip()
