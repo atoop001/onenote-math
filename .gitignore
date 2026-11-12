@@ -7,3 +7,5 @@ __pycache__/
 solver/.venv/
 addin/**/bin/
 addin/**/obj/
+reader/.venv/
+reader/.venv-train/
